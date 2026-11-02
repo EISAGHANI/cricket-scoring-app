@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ImageUpload } from "@/features/media/image-upload";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader, PageSkeleton } from "@/components/ui";
@@ -33,5 +34,10 @@ async function Edit({ params }: { params: PageProps<"/clubs/[slug]/edit">["param
 			</NotAllowed>
 		);
 	}
-	return <ClubForm club={club} />;
+	return (
+		<div className="space-y-4">
+			<ClubForm club={club} />
+			<ImageUpload owner="CLUB" ownerId={club.id} label="Club logo" />
+		</div>
+	);
 }

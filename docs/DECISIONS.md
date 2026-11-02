@@ -23,6 +23,7 @@ Lightweight ADRs. Each entry: context → decision → consequences. Status is o
 | 0012 | Golden-test data from Cricsheet                          | Accepted | —      |
 | 0013 | DLS-style resource table is external data, not code      | Accepted | —      |
 | 0014 | Tenancy model: organisation = tenant; players are global | Accepted | —      |
+| 0015 | Images uploaded through the server and re-encoded        | Accepted | —      |
 
 ---
 
@@ -191,8 +192,8 @@ lint passed, but `eslint-config-next@16.4.3` bundles `eslint-plugin-react`,
 `infra/docker-compose.yml`. App code talks plain S3 through the AWS SDK, so switching (Garage,
 SeaweedFS, or MinIO built from source) is a compose-file change only.
 
-**Risk.** Not yet smoke-tested: the Docker daemon wasn't running during Phase 0. Verify bucket
-create, put and presigned get in Phase 2 when uploads land.
+**Verified in Phase 2:** bucket creation, bucket policy (public read of `media/*` only,
+everything else 403), puts with cache headers, and image uploads end to end (local and CI).
 
 ## ADR-0011 — UUIDv7 for all primary keys
 
@@ -249,3 +250,21 @@ use it? Until then, competitions can use ARR, MPO, or a manual target override.
 **Alternative rejected:** fully siloed tenants (CricClubs-style). That's simpler isolation, but
 the same physical player would exist once per league, which breaks career stats and profile
 claiming.
+
+## ADR-0015 — Images are uploaded through the server and re-encoded
+
+**Status:** Accepted (Phase 2; deviation from the Phase 2 plan's presigned uploads)
+
+**Context.** Avatars and logos are small, and untrusted image files carry risks: decoder bugs,
+polyglot files, and metadata such as GPS location in EXIF. Presigned browser uploads would also
+need bucket CORS configuration per environment.
+
+**Decision.** Uploads go through a Server Action (body limit 5 MB; files ≤ 4 MB, under Vercel's
+4.5 MB request limit). The server authorizes against the owning resource first, then `sharp`
+decodes the image (pixel limit 40 MP), auto-rotates it, and stores only re-encoded square WebP
+variants (512 and 128 px). Originals are never stored, so metadata is stripped. Objects live under
+`media/` with a public-read bucket policy and immutable cache headers.
+
+**Consequences.** Uploads cost server CPU (a few ms per image); large media such as match photos
+(Phase 7) will move to presigned uploads processed by the worker. Replaced images are not yet
+deleted from storage (cleanup job in Phase 5).

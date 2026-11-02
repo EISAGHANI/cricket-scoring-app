@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Avatar } from "@/components/avatar";
+import { ImageUpload } from "@/features/media/image-upload";
 import { Suspense } from "react";
 import { Card, PageHeader, PageSkeleton } from "@/components/ui";
 import { NameForm, SignOutButton } from "@/features/account/account-forms";
@@ -32,6 +34,12 @@ async function Account() {
 					Welcome! Add your name so teammates can find you.
 				</p>
 			)}
+			<div className="flex items-center gap-4">
+				<Avatar src={user.image} name={user.name || "?"} size={72} />
+				<p className="font-display text-2xl font-bold uppercase tracking-wide">
+					{user.name || "New player"}
+				</p>
+			</div>
 			<Card className="space-y-5 p-5">
 				<dl className="grid gap-3 text-sm sm:grid-cols-2">
 					<div>
@@ -61,6 +69,7 @@ async function Account() {
 					</LinkButton>
 				)}
 			</Card>
+			<ImageUpload owner="USER" ownerId={user.id} label="Account picture" />
 			<SignOutButton />
 		</div>
 	);

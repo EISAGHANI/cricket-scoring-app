@@ -1,4 +1,5 @@
 import { Pencil } from "lucide-react";
+import { Avatar } from "@/components/avatar";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -48,20 +49,23 @@ async function Team({ params }: { params: PageProps<"/teams/[slug]">["params"] }
 	return (
 		<>
 			<div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<p className="text-sm font-semibold uppercase tracking-wide text-muted">
-						{team.club === null ? (
-							"Independent team"
-						) : (
-							<Link href={`/clubs/${team.club.slug}`} className="hover:text-ink">
-								{team.club.name}
-							</Link>
-						)}{" "}
-						· {CATEGORY_LABEL[team.category]}
-					</p>
-					<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
-						{team.name} <span className="font-mono text-2xl text-muted">{team.shortName}</span>
-					</h1>
+				<div className="flex items-center gap-4">
+					<Avatar src={team.logoUrl} name={team.name} size={72} shape="square" />
+					<div>
+						<p className="text-sm font-semibold uppercase tracking-wide text-muted">
+							{team.club === null ? (
+								"Independent team"
+							) : (
+								<Link href={`/clubs/${team.club.slug}`} className="hover:text-ink">
+									{team.club.name}
+								</Link>
+							)}{" "}
+							· {CATEGORY_LABEL[team.category]}
+						</p>
+						<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
+							{team.name} <span className="font-mono text-2xl text-muted">{team.shortName}</span>
+						</h1>
+					</div>
 				</div>
 				<Suspense fallback={null}>
 					<TeamControls team={team} />

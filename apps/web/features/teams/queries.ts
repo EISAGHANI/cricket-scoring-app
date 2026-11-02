@@ -4,8 +4,9 @@ import { and, asc, eq, ilike, isNull } from "drizzle-orm";
 import { cacheTag } from "next/cache";
 import { db } from "@/lib/db";
 import { containsPattern } from "@/lib/services/like";
+import { mediaUrl } from "@/lib/storage";
 
-const { clubs, teams } = schema;
+const { clubs, teams, mediaAssets } = schema;
 
 export const teamTags = {
 	list: "teams",
@@ -20,6 +21,7 @@ export interface TeamSummary {
 	shortName: string;
 	category: "SENIOR" | "WOMEN" | "JUNIOR" | "VETERANS" | "OTHER";
 	club: { id: string; slug: string; name: string } | null;
+	logoUrl: string | null;
 }
 
 const summaryColumns = {
@@ -31,6 +33,7 @@ const summaryColumns = {
 	clubId: clubs.id,
 	clubSlug: clubs.slug,
 	clubName: clubs.name,
+	logo: mediaAssets.variants,
 };
 
 type SummaryRow = {
@@ -42,6 +45,7 @@ type SummaryRow = {
 	clubId: string | null;
 	clubSlug: string | null;
 	clubName: string | null;
+	logo: Record<string, string> | null;
 };
 
 function toSummary(r: SummaryRow): TeamSummary {
@@ -55,6 +59,7 @@ function toSummary(r: SummaryRow): TeamSummary {
 			r.clubId === null || r.clubSlug === null || r.clubName === null
 				? null
 				: { id: r.clubId, slug: r.clubSlug, name: r.clubName },
+		logoUrl: mediaUrl(r.logo, "512"),
 	};
 }
 
@@ -69,6 +74,7 @@ export async function listTeams(q: string | null): Promise<TeamSummary[]> {
 		.select(summaryColumns)
 		.from(teams)
 		.leftJoin(clubs, eq(clubs.id, teams.clubId))
+		.leftJoin(mediaAssets, eq(mediaAssets.id, teams.logoAssetId))
 		.where(where)
 		.orderBy(asc(teams.name))
 		.limit(100);
@@ -82,6 +88,7 @@ export async function getTeamBySlug(slug: string): Promise<TeamSummary | null> {
 		.select(summaryColumns)
 		.from(teams)
 		.leftJoin(clubs, eq(clubs.id, teams.clubId))
+		.leftJoin(mediaAssets, eq(mediaAssets.id, teams.logoAssetId))
 		.where(and(eq(teams.slug, slug), isNull(teams.deletedAt)));
 	if (row === undefined) return null;
 	cacheTag(teamTags.one(row.id));

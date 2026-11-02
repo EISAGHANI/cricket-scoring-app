@@ -4,8 +4,9 @@ import { and, asc, eq, ilike, isNull } from "drizzle-orm";
 import { cacheTag } from "next/cache";
 import { db } from "@/lib/db";
 import { containsPattern } from "@/lib/services/like";
+import { mediaUrl } from "@/lib/storage";
 
-const { clubs, teams } = schema;
+const { clubs, teams, mediaAssets } = schema;
 
 export const clubTags = {
 	list: "clubs",
@@ -36,17 +37,20 @@ export async function listClubs(q: string | null): Promise<ClubSummary[]> {
 }
 
 export interface ClubDetail extends ClubSummary {
+	logoUrl: string | null;
 	teams: { id: string; slug: string; name: string; shortName: string; category: string }[];
 }
 
 export async function getClubBySlug(slug: string): Promise<ClubDetail | null> {
 	"use cache";
 	cacheTag(clubTags.slug(slug));
-	const [club] = await db
-		.select({ id: clubs.id, slug: clubs.slug, name: clubs.name })
+	const [row] = await db
+		.select({ id: clubs.id, slug: clubs.slug, name: clubs.name, logo: mediaAssets.variants })
 		.from(clubs)
+		.leftJoin(mediaAssets, eq(mediaAssets.id, clubs.logoAssetId))
 		.where(and(eq(clubs.slug, slug), isNull(clubs.deletedAt)));
-	if (club === undefined) return null;
+	if (row === undefined) return null;
+	const { logo, ...club } = row;
 	cacheTag(clubTags.one(club.id));
 	const clubTeams = await db
 		.select({
@@ -59,5 +63,5 @@ export async function getClubBySlug(slug: string): Promise<ClubDetail | null> {
 		.from(teams)
 		.where(and(eq(teams.clubId, club.id), isNull(teams.deletedAt)))
 		.orderBy(asc(teams.name));
-	return { ...club, teams: clubTeams };
+	return { ...club, logoUrl: mediaUrl(logo, "512"), teams: clubTeams };
 }

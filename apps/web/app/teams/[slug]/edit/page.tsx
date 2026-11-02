@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ImageUpload } from "@/features/media/image-upload";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader, PageSkeleton } from "@/components/ui";
@@ -35,5 +36,10 @@ async function Edit({ params }: { params: PageProps<"/teams/[slug]/edit">["param
 			</NotAllowed>
 		);
 	}
-	return <TeamForm team={team} club={team.club} />;
+	return (
+		<div className="space-y-4">
+			<TeamForm team={team} club={team.club} />
+			<ImageUpload owner="TEAM" ownerId={team.id} label="Team logo" />
+		</div>
+	);
 }

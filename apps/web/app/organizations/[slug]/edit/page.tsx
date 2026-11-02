@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ImageUpload } from "@/features/media/image-upload";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader, PageSkeleton } from "@/components/ui";
@@ -33,5 +34,10 @@ async function Edit({ params }: { params: PageProps<"/organizations/[slug]/edit"
 			</NotAllowed>
 		);
 	}
-	return <OrganizationForm organization={org} />;
+	return (
+		<div className="space-y-4">
+			<OrganizationForm organization={org} />
+			<ImageUpload owner="ORGANIZATION" ownerId={org.id} label="League logo" />
+		</div>
+	);
 }

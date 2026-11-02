@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { Avatar } from "@/components/avatar";
 import { Card, LinkButton, PageSkeleton, SectionTitle } from "@/components/ui";
 import { BOWLING_LABEL, HAND_LABEL, ROLE_LABEL, SQUAD_ROLE_LABEL } from "@/features/players/labels";
 import { ClaimForm } from "@/features/players/player-forms";
@@ -41,15 +42,18 @@ async function Player({ params }: { params: PageProps<"/players/[slug]">["params
 		getCurrentUser(),
 		todayIso(),
 	]);
-	const view = playerView({ ...player, photoUrl: null }, canViewPrivate, today);
+	const view = playerView(player, canViewPrivate, today);
 	return (
 		<>
 			<div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<p className="text-sm font-semibold uppercase tracking-wide text-muted">Player</p>
-					<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
-						{view.displayName}
-					</h1>
+				<div className="flex items-center gap-4">
+					<Avatar src={view.photoUrl} name={view.displayName} size={72} />
+					<div>
+						<p className="text-sm font-semibold uppercase tracking-wide text-muted">Player</p>
+						<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
+							{view.displayName}
+						</h1>
+					</div>
 				</div>
 				{canEdit && (
 					<LinkButton href={`/players/${player.slug}/edit`} variant="ghost">

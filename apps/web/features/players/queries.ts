@@ -5,8 +5,9 @@ import { cacheTag } from "next/cache";
 import { connection } from "next/server";
 import { db } from "@/lib/db";
 import { containsPattern } from "@/lib/services/like";
+import { mediaUrl } from "@/lib/storage";
 
-const { players, teams, teamPlayers, playerClaims, users } = schema;
+const { players, teams, teamPlayers, playerClaims, users, mediaAssets } = schema;
 
 export const playerTags = {
 	list: "players",
@@ -45,17 +46,21 @@ export type PlayerProfile = {
 	visibility: "PUBLIC" | "PRIVATE_TO_TEAM";
 	guardianConsent: boolean;
 	userId: string | null;
+	photoUrl: string | null;
 	teams: { teamId: string; slug: string; name: string; clubId: string | null; squadRole: string }[];
 };
 
 export async function getPlayerBySlug(slug: string): Promise<PlayerProfile | null> {
 	"use cache";
 	cacheTag(playerTags.slug(slug));
-	const [player] = await db
-		.select(profileColumns)
+	const [row] = await db
+		.select({ ...profileColumns, photo: mediaAssets.variants })
 		.from(players)
+		.leftJoin(mediaAssets, eq(mediaAssets.id, players.photoAssetId))
 		.where(and(eq(players.slug, slug), isNull(players.deletedAt)));
-	if (player === undefined) return null;
+	if (row === undefined) return null;
+	const { photo, ...rest } = row;
+	const player = { ...rest, photoUrl: mediaUrl(photo, "512") };
 	cacheTag(playerTags.one(player.id));
 	const memberships = await db
 		.select({
@@ -82,7 +87,10 @@ export async function getOwnPlayerSlug(userId: string): Promise<string | null> {
 	return p?.slug ?? null;
 }
 
-export type PlayerListItem = Omit<PlayerProfile, "teams" | "battingHand" | "bowlingStyle">;
+export type PlayerListItem = Omit<
+	PlayerProfile,
+	"teams" | "battingHand" | "bowlingStyle" | "photoUrl"
+>;
 
 export async function listPlayers(q: string | null): Promise<PlayerListItem[]> {
 	"use cache";

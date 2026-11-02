@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ImageUpload } from "@/features/media/image-upload";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { PageHeader, PageSkeleton } from "@/components/ui";
@@ -39,5 +40,10 @@ async function Edit({ params }: { params: PageProps<"/players/[slug]/edit">["par
 			</NotAllowed>
 		);
 	}
-	return <PlayerForm player={player} />;
+	return (
+		<div className="space-y-4">
+			<PlayerForm player={player} />
+			<ImageUpload owner="PLAYER" ownerId={player.id} label="Photo" />
+		</div>
+	);
 }

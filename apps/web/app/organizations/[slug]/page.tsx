@@ -1,5 +1,6 @@
 import { Pencil } from "lucide-react";
 import type { Metadata } from "next";
+import { Avatar } from "@/components/avatar";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Card, LinkButton, PageSkeleton } from "@/components/ui";
@@ -27,11 +28,14 @@ async function Organization({ params }: { params: PageProps<"/organizations/[slu
 	return (
 		<>
 			<div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<p className="text-sm font-semibold uppercase tracking-wide text-muted">League</p>
-					<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
-						{org.name}
-					</h1>
+				<div className="flex items-center gap-4">
+					<Avatar src={org.logoUrl} name={org.name} size={72} shape="square" />
+					<div>
+						<p className="text-sm font-semibold uppercase tracking-wide text-muted">League</p>
+						<h1 className="font-display text-4xl font-bold uppercase tracking-wide sm:text-5xl">
+							{org.name}
+						</h1>
+					</div>
 				</div>
 				<Suspense fallback={null}>
 					<Controls org={org} />
