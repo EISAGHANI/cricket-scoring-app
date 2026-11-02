@@ -82,6 +82,21 @@ export function bowlerLine(inn: InningsState, id: PlayerId): BowlerLine {
 	return line;
 }
 
+/** Undo the start of an over nobody bowled in; drop the bowler's line if it is now empty. */
+export function unstartOver(inn: InningsState): void {
+	const id = must(inn.currentOver?.bowlerIds[0], "bowler");
+	const line = bowlerLine(inn, id);
+	line.oversStarted--;
+	const empty =
+		line.oversStarted === 0 &&
+		line.legalBalls === 0 &&
+		line.runs === 0 &&
+		line.wides === 0 &&
+		line.noBalls === 0;
+	if (empty) inn.bowlers = inn.bowlers.filter((b) => b !== line);
+	inn.currentOver = null;
+}
+
 export function atCrease(inn: InningsState, id: PlayerId): boolean {
 	return inn.strikerId === id || inn.nonStrikerId === id;
 }

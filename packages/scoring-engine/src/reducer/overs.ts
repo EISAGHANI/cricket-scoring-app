@@ -9,6 +9,7 @@ import {
 	needsBowler,
 	requireInnings,
 	requireRules,
+	unstartOver,
 } from "./context";
 import { checkInningsEnd, completeOver } from "./innings";
 
@@ -74,13 +75,7 @@ export function applyBowlerChange(state: MatchState, event: BowlerChangeEvent): 
 
 	if (over.balls.length === 0) {
 		// Correcting the selection before a ball is bowled.
-		const previous = must(over.bowlerIds[0], "bowler");
-		const line = bowlerLine(inn, previous);
-		line.oversStarted--;
-		if (line.oversStarted === 0 && line.legalBalls === 0 && line.runs === 0) {
-			inn.bowlers = inn.bowlers.filter((b) => b !== line);
-		}
-		inn.currentOver = null;
+		unstartOver(inn);
 		const check = bowlerEligibility(state, inn, bowlerId, false);
 		if (!check.eligible)
 			violation(`BOWLER_${check.reason}`, "R-OV-05", `${bowlerId} cannot bowl: ${check.reason}`);

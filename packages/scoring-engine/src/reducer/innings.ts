@@ -3,7 +3,7 @@ import { must } from "../internal/must";
 import type { TeamId } from "../types/ids";
 import type { MatchResult } from "../types/results";
 import type { InningsCloseReason, InningsState, MatchState } from "../types/state";
-import { ballsUsed, otherTeam, requireRules } from "./context";
+import { ballsUsed, otherTeam, requireRules, unstartOver } from "./context";
 
 export function regularInnings(state: MatchState): InningsState[] {
 	return state.innings.filter((i) => i.kind === "REGULAR");
@@ -52,17 +52,7 @@ export function closeInnings(
 ): void {
 	if (inn.currentOver !== null) {
 		if (inn.currentOver.balls.length > 0) completeOver(inn);
-		else {
-			// A bowler was named but never bowled: undo the over start.
-			const id = must(inn.currentOver.bowlerIds[0], "bowler");
-			const line = must(
-				inn.bowlers.find((b) => b.playerId === id),
-				"bowler line",
-			);
-			line.oversStarted--;
-			if (line.oversStarted === 0) inn.bowlers = inn.bowlers.filter((b) => b !== line);
-			inn.currentOver = null;
-		}
+		else unstartOver(inn); // a bowler was named but never bowled
 	}
 	for (const b of inn.batters) if (b.status === "BATTING") b.status = "NOT_OUT";
 	const open = inn.partnerships[inn.partnerships.length - 1];

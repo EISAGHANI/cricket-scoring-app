@@ -138,10 +138,12 @@ export function applyBatterIn(state: MatchState, event: BatterInEvent): void {
 	const line = batterLine(inn, batterId);
 	if (line === null) newBatterLine(inn, batterId);
 	else line.status = "BATTING"; // retired hurt, resuming (R-SUB-04)
-	const survivor = inn.strikerId ?? inn.nonStrikerId;
 	if (inn.strikerId === null) inn.strikerId = batterId;
 	else inn.nonStrikerId = batterId;
-	if (survivor !== null) startPartnership(inn, survivor, batterId);
+	// A new partnership starts once the crease is full (one batter in Last Man Stands solo mode).
+	if (openPartnership(inn) === null && !needsBatter(inn)) {
+		startPartnership(inn, must(inn.strikerId, "striker"), inn.nonStrikerId);
+	}
 }
 
 export function applyWicket(state: MatchState, event: WicketEvent): void {
