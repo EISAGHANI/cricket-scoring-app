@@ -3,6 +3,7 @@ import { Suspense, type ReactNode } from "react";
 import { Logo } from "./logo";
 import { NAV } from "./nav-config";
 import { NavLinks } from "./nav-links";
+import { UserMenu, UserMenuFallback } from "./user-menu";
 
 /**
  * Header (desktop links) and bottom tab bar (phones). The links highlight the
@@ -19,11 +20,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 						<Logo className="size-9" />
 						<span className="font-display text-2xl font-bold uppercase tracking-wider">Crease</span>
 					</Link>
-					<nav aria-label="Main" className="hidden sm:block">
-						<Suspense fallback={<StaticLinks variant="top" />}>
-							<NavLinks variant="top" />
+					<div className="flex items-center gap-1">
+						<nav aria-label="Main" className="hidden sm:block">
+							<Suspense fallback={<StaticLinks variant="top" />}>
+								<NavLinks variant="top" />
+							</Suspense>
+						</nav>
+						<Suspense fallback={<UserMenuFallback />}>
+							<UserMenu />
 						</Suspense>
-					</nav>
+					</div>
 				</div>
 			</header>
 

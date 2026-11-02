@@ -1,0 +1,48 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Card, PageHeader, PageSkeleton } from "@/components/ui";
+import { NameForm, SignOutButton } from "@/features/account/account-forms";
+import { requireUser } from "@/lib/auth/session";
+
+export const metadata: Metadata = { title: "Your account" };
+
+export default function MePage() {
+	return (
+		<>
+			<PageHeader title="Your account" />
+			<Suspense fallback={<PageSkeleton />}>
+				<Account />
+			</Suspense>
+		</>
+	);
+}
+
+async function Account() {
+	const user = await requireUser("/me");
+	return (
+		<div className="space-y-4">
+			{user.name === "" && (
+				<p
+					role="status"
+					className="rounded-2xl bg-brand-soft px-4 py-3 text-sm font-medium text-brand"
+				>
+					Welcome! Add your name so teammates can find you.
+				</p>
+			)}
+			<Card className="space-y-5 p-5">
+				<dl className="grid gap-3 text-sm sm:grid-cols-2">
+					<div>
+						<dt className="text-muted">Email</dt>
+						<dd className="font-semibold">{user.email ?? "Not set"}</dd>
+					</div>
+					<div>
+						<dt className="text-muted">Phone</dt>
+						<dd className="font-semibold">{user.phoneNumber ?? "Not set"}</dd>
+					</div>
+				</dl>
+				<NameForm initialName={user.name} />
+			</Card>
+			<SignOutButton />
+		</div>
+	);
+}

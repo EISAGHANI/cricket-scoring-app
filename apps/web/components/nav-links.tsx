@@ -7,9 +7,10 @@ import { cx } from "./ui";
 
 function isActive(pathname: string, href: string) {
 	if (href === "/") return pathname === "/";
-	if (href === "/matches")
+	if (href === "/local/matches")
 		return (
-			pathname === "/matches" || (pathname.startsWith("/matches/") && pathname !== "/matches/new")
+			pathname === "/local/matches" ||
+			(pathname.startsWith("/local/matches/") && pathname !== "/local/matches/new")
 		);
 	return pathname === href || pathname.startsWith(`${href}/`);
 }

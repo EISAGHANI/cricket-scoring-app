@@ -52,7 +52,7 @@ export function MatchScreen({ id }: { id: string }) {
 			<EmptyState
 				icon={<SearchX className="size-8" aria-hidden="true" />}
 				title="Match not found"
-				action={<LinkButton href="/matches">All matches</LinkButton>}
+				action={<LinkButton href="/local/matches">All matches</LinkButton>}
 			>
 				It may have been deleted, or it was scored on a different device or browser.
 			</EmptyState>
@@ -86,7 +86,7 @@ export function MatchScreen({ id }: { id: string }) {
 	return (
 		<div className="mx-auto max-w-3xl">
 			<div className="mb-4 flex items-center gap-2">
-				<LinkButton href="/matches" variant="ghost" size="sm" aria-label="Back to matches">
+				<LinkButton href="/local/matches" variant="ghost" size="sm" aria-label="Back to matches">
 					<ArrowLeft className="size-4" aria-hidden="true" />
 				</LinkButton>
 				<div className="flex min-w-0 flex-1 items-center gap-2">
@@ -235,7 +235,7 @@ export function MatchScreen({ id }: { id: string }) {
 							variant="danger"
 							onClick={() => {
 								deleteMatch(id);
-								router.push("/matches");
+								router.push("/local/matches");
 							}}
 						>
 							<Trash2 className="size-4" aria-hidden="true" /> Delete

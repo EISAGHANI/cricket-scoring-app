@@ -44,11 +44,11 @@ export function HomeScreen() {
 						right in your browser, even without signal at the ground.
 					</p>
 					<div className="mt-7 flex flex-wrap gap-3">
-						<LinkButton href="/matches/new" size="lg" variant="light">
+						<LinkButton href="/local/matches/new" size="lg" variant="light">
 							<CirclePlus className="size-5" aria-hidden="true" /> New match
 						</LinkButton>
 						<LinkButton
-							href="/teams"
+							href="/local/teams"
 							size="lg"
 							variant="ghost"
 							className="text-white ring-1 ring-white/30 hover:bg-white/10"
@@ -77,7 +77,7 @@ export function HomeScreen() {
 						<Button variant="secondary" onClick={loadSampleTeams}>
 							<Sparkles className="size-4" aria-hidden="true" /> Load sample teams
 						</Button>
-						<LinkButton href="/teams">Create team</LinkButton>
+						<LinkButton href="/local/teams">Create team</LinkButton>
 					</div>
 				</Card>
 			)}
@@ -97,7 +97,7 @@ export function HomeScreen() {
 				<SectionTitle
 					action={
 						db.matches.length > 0 && (
-							<LinkButton href="/matches" variant="ghost" size="sm">
+							<LinkButton href="/local/matches" variant="ghost" size="sm">
 								All matches <ArrowRight className="size-4" aria-hidden="true" />
 							</LinkButton>
 						)

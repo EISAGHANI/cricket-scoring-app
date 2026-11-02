@@ -25,7 +25,7 @@ export function MatchesScreen() {
 				title="Matches"
 				subtitle={`${db.matches.length} match${db.matches.length === 1 ? "" : "es"} on this device`}
 				action={
-					<LinkButton href="/matches/new">
+					<LinkButton href="/local/matches/new">
 						<CirclePlus className="size-4" aria-hidden="true" /> New match
 					</LinkButton>
 				}
@@ -35,7 +35,7 @@ export function MatchesScreen() {
 				<EmptyState
 					icon={<ListOrdered className="size-8" aria-hidden="true" />}
 					title="No matches yet"
-					action={<LinkButton href="/matches/new">Start your first match</LinkButton>}
+					action={<LinkButton href="/local/matches/new">Start your first match</LinkButton>}
 				>
 					Every match you score is saved here, with its full scorecard.
 				</EmptyState>

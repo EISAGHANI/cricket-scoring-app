@@ -53,7 +53,7 @@ export function MatchCard({ match }: { match: Match }) {
 
 	return (
 		<Link
-			href={`/matches/${match.id}`}
+			href={`/local/matches/${match.id}`}
 			className="group block rounded-3xl border border-line bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:border-brand/40"
 		>
 			<div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted">

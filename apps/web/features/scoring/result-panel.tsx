@@ -121,7 +121,7 @@ export function ResultPanel({
 				<Button onClick={onShowScorecard}>
 					<ClipboardList className="size-4" aria-hidden="true" /> Full scorecard
 				</Button>
-				<LinkButton href="/matches/new" variant="secondary">
+				<LinkButton href="/local/matches/new" variant="secondary">
 					<CirclePlus className="size-4" aria-hidden="true" /> New match
 				</LinkButton>
 				<div className="flex-1" />

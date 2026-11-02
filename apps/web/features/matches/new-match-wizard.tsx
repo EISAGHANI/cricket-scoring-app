@@ -87,7 +87,7 @@ export function NewMatchWizard() {
 			battingFirst,
 			venue: venue.trim() || undefined,
 		});
-		router.push(`/matches/${match.id}`);
+		router.push(`/local/matches/${match.id}`);
 	}
 
 	if (db.teams.length < 2) {

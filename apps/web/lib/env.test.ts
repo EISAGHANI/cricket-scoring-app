@@ -1,23 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { parseEnv } from "./env";
 
+const base = {
+	DATABASE_URL: "postgres://cricket:cricket@localhost:5432/cricket",
+	BETTER_AUTH_SECRET: "x".repeat(32),
+};
+
 describe("parseEnv", () => {
-	it("applies defaults when optional infra vars are absent", () => {
-		const env = parseEnv({});
+	it("applies defaults for optional settings", () => {
+		const env = parseEnv(base);
 		expect(env.NODE_ENV).toBe("development");
 		expect(env.NEXT_PUBLIC_APP_URL).toBe("http://localhost:3000");
-		expect(env.DATABASE_URL).toBeUndefined();
+		expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+		expect(env.MAIL_FROM).toContain("no-reply");
 	});
 
-	it("rejects a malformed DATABASE_URL", () => {
-		expect(() => parseEnv({ DATABASE_URL: "mysql://x" })).toThrow(/DATABASE_URL/);
+	it("requires a database URL and a strong auth secret", () => {
+		expect(() => parseEnv({ ...base, DATABASE_URL: undefined })).toThrow(/DATABASE_URL/);
+		expect(() => parseEnv({ ...base, DATABASE_URL: "mysql://x" })).toThrow(/DATABASE_URL/);
+		expect(() => parseEnv({ ...base, BETTER_AUTH_SECRET: "short" })).toThrow(/at least 32/);
 	});
 
-	it("accepts the docker-compose defaults", () => {
-		const env = parseEnv({
-			DATABASE_URL: "postgres://cricket:cricket@localhost:5432/cricket",
-			REDIS_URL: "redis://localhost:6379",
-		});
-		expect(env.REDIS_URL).toBe("redis://localhost:6379");
+	it("treats empty optional strings as unset", () => {
+		expect(parseEnv({ ...base, GOOGLE_CLIENT_ID: "" }).GOOGLE_CLIENT_ID).toBeUndefined();
 	});
 });
