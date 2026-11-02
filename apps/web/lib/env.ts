@@ -30,7 +30,7 @@ const EnvSchema = z.object({
 	RESEND_API_KEY: optionalString,
 	SMTP_URL: z.url({ protocol: /^smtps?$/ }).optional(),
 
-	/** Sign-in code / link requests allowed per IP per minute (raised for end-to-end tests). */
+	/** Sign-in code/link requests per IP per minute; verifications get twice this (raised in E2E). */
 	AUTH_CODE_REQUESTS_PER_MINUTE: z.coerce.number().int().positive().default(5),
 
 	REDIS_URL: z.url({ protocol: /^rediss?$/ }).optional(),

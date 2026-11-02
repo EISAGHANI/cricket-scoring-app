@@ -3,6 +3,7 @@ import type { Subject } from "@cricket/authz";
 import { schema } from "@cricket/db";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
+import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "../db";
@@ -24,6 +25,9 @@ const PLACEHOLDER_EMAIL = /@phone\.cricket\.invalid$/;
  * callers must render inside a <Suspense> boundary (Cache Components).
  */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+	// Session checks compare expiry with the current time: always evaluate at request time,
+	// never during (runtime) prerendering.
+	await connection();
 	const session = await auth.api.getSession({ headers: await headers() });
 	if (session === null) return null;
 	const u = session.user as typeof session.user & { phoneNumber?: string | null };

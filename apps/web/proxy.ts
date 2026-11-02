@@ -16,5 +16,12 @@ export function proxy(request: NextRequest) {
 
 export const config = {
 	// Pages that only make sense signed in.
-	matcher: ["/me/:path*", "/clubs/new", "/teams/new", "/players/new"],
+	matcher: [
+		"/me/:path*",
+		"/clubs/new",
+		"/teams/new",
+		"/players/new",
+		"/organizations/new",
+		"/:kind(clubs|teams|organizations|players)/:slug/edit",
+	],
 };

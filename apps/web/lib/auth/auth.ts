@@ -52,6 +52,9 @@ export const auth = betterAuth({
 			"/email-otp/send-verification-otp": { window: 60, max: env.AUTH_CODE_REQUESTS_PER_MINUTE },
 			"/sign-in/magic-link": { window: 60, max: env.AUTH_CODE_REQUESTS_PER_MINUTE },
 			"/phone-number/send-otp": { window: 60, max: env.AUTH_CODE_REQUESTS_PER_MINUTE },
+			// Code verification: each code also allows only 3 attempts (Better Auth default).
+			"/sign-in/email-otp": { window: 60, max: env.AUTH_CODE_REQUESTS_PER_MINUTE * 2 },
+			"/phone-number/verify": { window: 60, max: env.AUTH_CODE_REQUESTS_PER_MINUTE * 2 },
 		},
 	},
 	plugins: [
