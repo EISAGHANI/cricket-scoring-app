@@ -24,6 +24,7 @@ Lightweight ADRs. Each entry: context → decision → consequences. Status is o
 | 0013 | DLS-style resource table is external data, not code      | Accepted | —      |
 | 0014 | Tenancy model: organisation = tenant; players are global | Accepted | —      |
 | 0015 | Images uploaded through the server and re-encoded        | Accepted | —      |
+| 0016 | Static CSP without nonces (Cache Components)             | Accepted | —      |
 
 ---
 
@@ -268,3 +269,24 @@ variants (512 and 128 px). Originals are never stored, so metadata is stripped. 
 **Consequences.** Uploads cost server CPU (a few ms per image); large media such as match photos
 (Phase 7) will move to presigned uploads processed by the worker. Replaced images are not yet
 deleted from storage (cleanup job in Phase 5).
+
+## ADR-0016 — Static Content Security Policy without nonces
+
+**Status:** Accepted (Phase 2, M8)
+
+**Context.** The brief asks for a strict CSP. Nonce-based CSP forces every page to render per
+request, and the bundled Next.js 16 guide states it is incompatible with partial prerendering,
+which Cache Components relies on for static shells and instant navigation. Hash-based CSP via SRI
+is still experimental.
+
+**Decision.** A static CSP set in `next.config.ts` (`lib/security-headers.ts`, unit-tested):
+scripts and styles from our origin with inline allowed (Next's streaming payload is inline),
+images from our origin and the media host only, `connect-src 'self'`, `object-src 'none'`,
+`base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`; `upgrade-insecure-requests` and
+HSTS only on HTTPS deployments; plus `nosniff`, a strict referrer policy, a restrictive
+permissions policy and no `X-Powered-By`. Auth endpoints reject cross-origin requests and session
+cookies are `HttpOnly` + `SameSite=Lax` (both covered by end-to-end tests).
+
+**Consequences.** XSS defence relies on React's escaping and on blocking every other script
+source, not on nonces. Revisit when SRI is stable. The streaming overlay route (Phase 7) will need
+its own `frame-ancestors` rule for OBS.
