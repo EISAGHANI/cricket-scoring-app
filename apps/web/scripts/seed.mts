@@ -193,15 +193,13 @@ async function main(): Promise<void> {
 				});
 				// A manager per team (club admins can grant this later through the UI too).
 				const manager = await user(db, `manager${++managerN}@cricket.local`, `Manager ${managerN}`);
-				await db
-					.insert(schema.roleAssignments)
-					.values({
-						userId: manager,
-						role: "TEAM_MANAGER",
-						scopeType: "TEAM",
-						scopeId: team.id,
-						grantedBy: clubAdmin,
-					});
+				await db.insert(schema.roleAssignments).values({
+					userId: manager,
+					role: "TEAM_MANAGER",
+					scopeType: "TEAM",
+					scopeId: team.id,
+					grantedBy: clubAdmin,
+				});
 				const managerCtx = await ctxFor(db, manager);
 
 				// The captain has an account and owns their profile.
