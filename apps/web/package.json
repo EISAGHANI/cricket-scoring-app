@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
     "test:e2e": "playwright test",
-    "storage:init": "tsx --env-file-if-exists=.env.local scripts/storage-init.mts"
+    "storage:init": "tsx --env-file-if-exists=.env.local scripts/storage-init.mts",
+    "db:seed": "tsx --env-file-if-exists=.env.local scripts/seed.mts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1158.0",
