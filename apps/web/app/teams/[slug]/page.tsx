@@ -10,7 +10,14 @@ import { decideClaimAction } from "@/features/players/actions";
 import { ROLE_LABEL, SQUAD_ROLE_LABEL } from "@/features/players/labels";
 import { AddSquadPlayerForm, SquadMemberControls } from "@/features/players/player-forms";
 import { getSquad, pendingClaimsForTeam, todayIso } from "@/features/players/queries";
-import { getSubject } from "@/lib/auth/session";
+import { getCurrentUser, getSubject } from "@/lib/auth/session";
+import { decideJoinRequestAction, revokeInvitationAction } from "@/features/invitations/actions";
+import { InviteForm, JoinRequestForm } from "@/features/invitations/forms";
+import {
+	membershipOf,
+	pendingInvitations,
+	pendingJoinRequests,
+} from "@/features/invitations/queries";
 import { getTeamBySlug, type TeamSummary } from "@/features/teams/queries";
 import { viewerCan } from "@/lib/services/server";
 
@@ -62,6 +69,9 @@ async function Team({ params }: { params: PageProps<"/teams/[slug]">["params"] }
 			</div>
 			<Suspense fallback={<PageSkeleton />}>
 				<Squad team={team} />
+			</Suspense>
+			<Suspense fallback={null}>
+				<Membership team={team} />
 			</Suspense>
 		</>
 	);
@@ -182,5 +192,98 @@ async function Squad({ team }: { team: TeamSummary }) {
 				</div>
 			)}
 		</section>
+	);
+}
+
+/** Invitations and join requests for staff; "ask to join" for other signed-in users. */
+async function Membership({ team }: { team: TeamSummary }) {
+	const resource = { type: "team" as const, id: team.id, clubId: team.club?.id ?? null };
+	const [subject, user] = await Promise.all([getSubject(), getCurrentUser()]);
+	const canInvite = can(subject, "team.invite", resource);
+	const canDecide = can(subject, "team.decideJoinRequest", resource);
+	if (!canInvite && !canDecide) {
+		if (user === null) return null;
+		const status = await membershipOf(team.id, user.id);
+		if (status === "member") return null;
+		return (
+			<div className="mt-6">
+				{status === "pending" ? (
+					<p role="status" className="text-sm text-muted">
+						Your request to join is waiting for the team&apos;s staff.
+					</p>
+				) : (
+					<JoinRequestForm teamId={team.id} />
+				)}
+			</div>
+		);
+	}
+	const [invites, requests] = await Promise.all([
+		canInvite ? pendingInvitations(team.id) : Promise.resolve([]),
+		canDecide ? pendingJoinRequests(team.id) : Promise.resolve([]),
+	]);
+	return (
+		<>
+			{canInvite && (
+				<section aria-labelledby="invite-title" className="mt-8">
+					<SectionTitle>
+						<span id="invite-title">Invite players</span>
+					</SectionTitle>
+					<Card className="p-5">
+						<InviteForm teamId={team.id} />
+					</Card>
+					{invites.length > 0 && (
+						<Card className="mt-3 divide-y divide-line">
+							{invites.map((i) => (
+								<div key={i.id} className="flex items-center justify-between gap-3 p-4 text-sm">
+									<span>
+										<strong>{i.email ?? i.phoneNumber}</strong>
+										<span className="text-muted">
+											{" "}
+											· invited, expires {i.expiresAt.toISOString().slice(0, 10)}
+										</span>
+									</span>
+									<form action={revokeInvitationAction.bind(null, i.id)}>
+										<Button type="submit" size="sm" variant="ghost">
+											Revoke
+										</Button>
+									</form>
+								</div>
+							))}
+						</Card>
+					)}
+				</section>
+			)}
+			{requests.length > 0 && (
+				<section aria-labelledby="requests-title" className="mt-8">
+					<SectionTitle>
+						<span id="requests-title">Join requests</span>
+					</SectionTitle>
+					<Card className="divide-y divide-line">
+						{requests.map((r) => (
+							<div key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+								<div className="text-sm">
+									<p>
+										<strong>{r.name || r.email}</strong> wants to join
+									</p>
+									{r.message !== null && <p className="text-muted">“{r.message}”</p>}
+								</div>
+								<div className="flex gap-2">
+									<form action={decideJoinRequestAction.bind(null, r.id, true)}>
+										<Button type="submit" size="sm">
+											Accept
+										</Button>
+									</form>
+									<form action={decideJoinRequestAction.bind(null, r.id, false)}>
+										<Button type="submit" size="sm" variant="secondary">
+											Decline
+										</Button>
+									</form>
+								</div>
+							</div>
+						))}
+					</Card>
+				</section>
+			)}
+		</>
 	);
 }

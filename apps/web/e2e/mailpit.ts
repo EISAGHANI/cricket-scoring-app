@@ -7,23 +7,32 @@ interface Summary {
 	Snippet: string;
 }
 
-export async function latestMessage(to: string, timeoutMs = 15_000): Promise<Summary> {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
-		const body = (await res.json()) as { messages: Summary[] };
-		const first = body.messages[0];
-		if (first !== undefined) return first;
-		await new Promise((r) => setTimeout(r, 300));
-	}
-	throw new Error(`No message for ${to} within ${timeoutMs} ms`);
+async function search(to: string): Promise<Summary[]> {
+	const res = await fetch(`${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`);
+	return ((await res.json()) as { messages: Summary[] }).messages;
 }
 
+/** Newest message to `to` that satisfies `match`, polling until it arrives. */
+export async function latestMessage(
+	to: string,
+	match: (m: Summary) => boolean = () => true,
+	timeoutMs = 15_000,
+): Promise<Summary> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const found = (await search(to)).find(match);
+		if (found !== undefined) return found;
+		await new Promise((r) => setTimeout(r, 300));
+	}
+	throw new Error(`No matching message for ${to} within ${timeoutMs} ms`);
+}
+
+const CODE = /\b(\d{6})\b/;
+
+/** The most recent sign-in code sent to `to` (email or dev SMS). */
 export async function codeFor(to: string): Promise<string> {
-	const m = await latestMessage(to);
-	const code = /\b(\d{6})\b/.exec(`${m.Subject} ${m.Snippet}`)?.[1];
-	if (code === undefined) throw new Error(`No code in message to ${to}`);
-	return code;
+	const m = await latestMessage(to, (msg) => CODE.test(`${msg.Subject} ${msg.Snippet}`));
+	return CODE.exec(`${m.Subject} ${m.Snippet}`)![1]!;
 }
 
 export const uniqueEmail = (prefix: string): string =>

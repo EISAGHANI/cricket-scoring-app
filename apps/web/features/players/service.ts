@@ -44,7 +44,7 @@ async function teamResource(
  * Keep a claimed player's role assignments on a team in line with their squad membership:
  * PLAYER while in the squad, plus CAPTAIN while captain. TEAM_MANAGER is never touched.
  */
-async function syncTeamRoles(
+export async function syncTeamRoles(
 	tx: Executor,
 	teamId: string,
 	playerId: string,
@@ -230,7 +230,11 @@ export async function addSquadPlayer(ctx: ServiceContext, teamId: string, raw: u
 	});
 }
 
-async function demoteCaptain(tx: Executor, teamId: string, grantedBy: string): Promise<void> {
+export async function demoteCaptain(
+	tx: Executor,
+	teamId: string,
+	grantedBy: string,
+): Promise<void> {
 	const captains = await tx
 		.update(teamPlayers)
 		.set({ squadRole: "PLAYER" })
@@ -379,4 +383,58 @@ export async function decideClaim(ctx: ServiceContext, claimId: string, approve:
 		});
 		return { playerId: claim.playerId };
 	});
+}
+
+/** Add a player to a squad inside an existing transaction (caller authorizes). */
+export async function addToSquadInTx(
+	tx: Executor,
+	teamId: string,
+	playerId: string,
+	squadRole: "CAPTAIN" | "VICE_CAPTAIN" | "WICKET_KEEPER" | "PLAYER",
+	actorId: string,
+): Promise<"added" | "already"> {
+	const [already] = await tx
+		.select({ id: teamPlayers.id })
+		.from(teamPlayers)
+		.where(
+			and(
+				eq(teamPlayers.teamId, teamId),
+				eq(teamPlayers.playerId, playerId),
+				isNull(teamPlayers.leftAt),
+			),
+		);
+	if (already !== undefined) return "already";
+	if (squadRole === "CAPTAIN") await demoteCaptain(tx, teamId, actorId);
+	await tx.insert(teamPlayers).values({ teamId, playerId, squadRole });
+	await syncTeamRoles(tx, teamId, playerId, actorId);
+	return "added";
+}
+
+/**
+ * The user's player profile: their own, else claim `unclaimedPlayerId` if given and still
+ * unclaimed, else create one from their name.
+ */
+export async function ensureOwnPlayer(
+	tx: Executor,
+	userId: string,
+	fallbackName: string,
+	unclaimedPlayerId: string | null = null,
+): Promise<string> {
+	const [own] = await tx.select({ id: players.id }).from(players).where(eq(players.userId, userId));
+	if (own !== undefined) return own.id;
+	if (unclaimedPlayerId !== null) {
+		const claimed = await tx
+			.update(players)
+			.set({ userId })
+			.where(and(eq(players.id, unclaimedPlayerId), isNull(players.userId)))
+			.returning({ id: players.id });
+		if (claimed[0] !== undefined) return claimed[0].id;
+	}
+	const name = fallbackName.trim().length >= 2 ? fallbackName.trim() : "New player";
+	const slug = await uniqueSlug(tx, players, players.slug, name);
+	const [created] = await tx
+		.insert(players)
+		.values({ displayName: name, slug, userId, createdBy: userId })
+		.returning({ id: players.id });
+	return created!.id;
 }
