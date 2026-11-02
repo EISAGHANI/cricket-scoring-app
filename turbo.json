@@ -24,5 +24,6 @@
       "env": ["PROPERTY_RUNS"],
       "outputs": ["coverage/**"]
     }
-  }
+  },
+  "globalPassThroughEnv": ["DATABASE_URL", "TEST_DATABASE_URL", "PROPERTY_RUNS", "CI"]
 }

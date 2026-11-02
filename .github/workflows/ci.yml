@@ -16,7 +16,21 @@ jobs:
   verify:
     name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: cricket
+          POSTGRES_PASSWORD: cricket
+          POSTGRES_DB: cricket_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U cricket -d cricket_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://cricket:cricket@localhost:5432/cricket_test
+      DATABASE_URL: postgres://cricket:cricket@localhost:5432/cricket_test
     steps:
       - uses: actions/checkout@v7
 
@@ -32,6 +46,13 @@ jobs:
 
       - name: Format check
         run: pnpm format:check
+
+      - name: Migrations apply and match the schema (no drift)
+        run: |
+          pnpm --filter @cricket/db db:migrate
+          pnpm --filter @cricket/db db:check
+          pnpm --filter @cricket/db db:generate --name drift_check
+          test -z "$(git status --porcelain packages/db/migrations)" || { echo "Schema changed without a migration"; git status --porcelain packages/db/migrations; exit 1; }
 
       - name: Lint, typecheck, test
         run: pnpm turbo run lint typecheck test
