@@ -1,0 +1,23 @@
+{
+  "name": "@cricket/authz",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pure authorization: can(subject, action, resource) over role assignments. No I/O.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@cricket/config": "workspace:*",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

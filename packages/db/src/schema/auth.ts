@@ -2,7 +2,16 @@
  * Identity tables used by Better Auth (ADR-0004). Property names are Better Auth's field names;
  * SQL columns follow our snake_case convention. IDs come from Postgres (`generateId: false`).
  */
-import { boolean, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+	bigint,
+	boolean,
+	index,
+	integer,
+	pgTable,
+	text,
+	timestamp,
+	uuid,
+} from "drizzle-orm/pg-core";
 import { citext, createdAt, deletedAt, id, updatedAt } from "./columns";
 
 export const users = pgTable("users", {
@@ -69,3 +78,11 @@ export const verifications = pgTable(
 	},
 	(t) => [index("verifications_identifier_idx").on(t.identifier)],
 );
+
+/** Better Auth's database-backed rate limiter (Redis replaces it in Phase 4). */
+export const rateLimits = pgTable("rate_limits", {
+	id: id(),
+	key: text("key").notNull().unique(),
+	count: integer("count").notNull(),
+	lastRequest: bigint("last_request", { mode: "number" }).notNull(),
+});
