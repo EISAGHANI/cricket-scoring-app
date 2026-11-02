@@ -10,14 +10,19 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
-    "test:coverage": "vitest run --coverage --passWithNoTests"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run",
+    "replay": "tsx tools/cli.ts"
   },
   "devDependencies": {
     "@cricket/config": "workspace:*",
+    "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.0.5",
     "eslint": "9.39.5",
+    "fast-check": "4.10.2",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vitest": "5.0.5"
   }

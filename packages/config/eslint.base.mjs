@@ -25,6 +25,11 @@ export function baseConfig(options = {}) {
 				],
 			},
 		},
+		{
+			// Tests may assert presence with `!`; source code may not.
+			files: ["**/*.test.ts", "**/test/**/*.ts", "**/*.bench.ts"],
+			rules: { "@typescript-eslint/no-non-null-assertion": "off" },
+		},
 		prettier,
 	);
 }

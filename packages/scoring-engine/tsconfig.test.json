@@ -1,0 +1,4 @@
+{
+  "extends": "@cricket/config/tsconfig/node-service.json",
+  "include": ["src", "test", "tools", "*.ts"]
+}
