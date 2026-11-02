@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+.pnp
+.pnp.*
+
+# build / tooling output
+.next/
+out/
+build/
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# env files (examples are committed)
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+pnpm-debug.log*
+.vercel

@@ -1,0 +1,24 @@
+{
+  "name": "@cricket/scoring-engine",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pure, deterministic cricket scoring engine. Zero framework/DB/IO dependencies.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests"
+  },
+  "devDependencies": {
+    "@cricket/config": "workspace:*",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules
+.next
+.turbo
+dist
+coverage
+pnpm-lock.yaml
+docs/PROJECT_BRIEF.md
+apps/web/AGENTS.md
+apps/web/next-env.d.ts

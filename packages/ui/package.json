@@ -1,0 +1,25 @@
+{
+  "name": "@cricket/ui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared React components (scorecard, wagon wheel, worm/Manhattan charts, overlay widgets).",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "peerDependencies": {
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@cricket/config": "workspace:*",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}
