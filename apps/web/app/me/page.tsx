@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Card, PageHeader, PageSkeleton } from "@/components/ui";
 import { NameForm, SignOutButton } from "@/features/account/account-forms";
+import { getOwnPlayerSlug } from "@/features/players/queries";
+import { LinkButton } from "@/components/ui";
 import { requireUser } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Your account" };
@@ -19,6 +21,7 @@ export default function MePage() {
 
 async function Account() {
 	const user = await requireUser("/me");
+	const playerSlug = await getOwnPlayerSlug(user.id);
 	return (
 		<div className="space-y-4">
 			{user.name === "" && (
@@ -41,6 +44,22 @@ async function Account() {
 					</div>
 				</dl>
 				<NameForm initialName={user.name} />
+			</Card>
+			<Card className="flex flex-wrap items-center justify-between gap-3 p-5">
+				<p className="text-sm">
+					{playerSlug === null
+						? "You don't have a player profile yet."
+						: "Your player profile shows your teams and, later, your stats."}
+				</p>
+				{playerSlug === null ? (
+					<LinkButton href="/players/new" variant="secondary">
+						Create player profile
+					</LinkButton>
+				) : (
+					<LinkButton href={`/players/${playerSlug}`} variant="secondary">
+						View player profile
+					</LinkButton>
+				)}
 			</Card>
 			<SignOutButton />
 		</div>
