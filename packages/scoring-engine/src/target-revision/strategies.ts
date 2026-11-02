@@ -3,6 +3,7 @@
  * be used by the reducer, the scorer UI ("what if" calculators) and tests alike.
  */
 import { violation } from "../errors";
+import { must } from "../internal/must";
 import type { OversReduction } from "../types/state";
 
 /**
@@ -26,10 +27,11 @@ export function validateResourceTable(table: ResourceTable): void {
 			if (!Number.isFinite(value) || value < 0 || value > 100)
 				bad(`row ${overs} col ${w} out of range`);
 			if (overs === 0 && value !== 0) bad("row 0 must be zero");
-			if (w > 0 && value > (row[w - 1] ?? 0)) bad(`row ${overs} must not increase with wickets`);
+			if (w > 0 && value > must(row[w - 1], "cell"))
+				bad(`row ${overs} must not increase with wickets`);
 		}
 		const previous = table.rows[overs - 1];
-		if (previous !== undefined && row.some((v, w) => v < (previous[w] ?? 0)))
+		if (previous !== undefined && row.some((v, w) => v < must(previous[w], "cell")))
 			bad(`row ${overs} must not decrease with overs`);
 	}
 }
@@ -46,8 +48,8 @@ export function resources(
 	const lo = Math.floor(o);
 	const hi = Math.min(lo + 1, maxOvers);
 	const w = Math.max(0, wicketsLost);
-	const a = table.rows[lo]?.[w] ?? 0;
-	const b = table.rows[hi]?.[w] ?? 0;
+	const a = must(must(table.rows[lo], "row")[w], "cell");
+	const b = must(must(table.rows[hi], "row")[w], "cell");
 	return a + (b - a) * (o - lo);
 }
 

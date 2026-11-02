@@ -1,5 +1,6 @@
 /** Match setup and innings starts (CRICKET_RULES.md §4, §10, §11). */
 import { violation } from "../errors";
+import { must } from "../internal/must";
 import { validateRules } from "../rules/presets";
 import type {
 	BowlOutResultEvent,
@@ -173,7 +174,7 @@ export function applyInningsStarted(state: MatchState, event: InningsStartedEven
 	inn.strikerId = strikerId;
 	inn.nonStrikerId = nonStrikerId;
 	// Penalty runs awarded before this side batted (R-EXT-09, Law 41.17).
-	const pending = state.pendingPenaltyRuns[battingTeamId] ?? 0;
+	const pending = must(state.pendingPenaltyRuns[battingTeamId], "penalty tally");
 	if (pending > 0) {
 		inn.runs += pending;
 		inn.extras.penalties += pending;

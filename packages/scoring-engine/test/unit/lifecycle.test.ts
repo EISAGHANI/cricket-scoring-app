@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { needsBatter, parScore } from "../../src";
 import {
 	applyEvent,
 	awaiting,
@@ -147,6 +148,17 @@ describe("lifecycle", () => {
 	it("R-LC-05: replay equals the incremental fold", () => {
 		const m = started().balls("1 4! wd").out("BOWLED").in("a3").balls("1").undo().balls("2");
 		expect(replay(m.log)).toEqual(m.state);
+	});
+
+	it("R-LC-02: unknown event types are a programming error, not a rule violation", () => {
+		const m = started();
+		const bogus = { id: "x", seq: m.seq, type: "BOGUS", payload: {} } as never;
+		expect(() => applyEvent(m.state, bogus)).toThrow("Unhandled value");
+		expect(() => parScore(initialState())).toThrowError(
+			expect.objectContaining({ code: "MATCH_NOT_STARTED" }),
+		);
+		const done = firstInnings("W").in("a3").out("BOWLED");
+		expect(needsBatter(done.inn)).toBe(false);
 	});
 
 	it("R-LC-06: event sequence numbers must increase", () => {

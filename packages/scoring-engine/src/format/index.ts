@@ -1,10 +1,10 @@
 /** Human-readable text: dismissals, results, scorecards and auto-commentary. */
 import { must } from "../internal/must";
-import { inningsOversText } from "../reducer/context";
+import { currentBowlerId, inningsOversText } from "../reducer/context";
 import { economy, strikeRate } from "../metrics";
 import type { DeliveryEvent } from "../types/events";
 import type { PlayerId, TeamId } from "../types/ids";
-import type { MatchResult } from "../types/results";
+import type { MatchResult, WinMethod } from "../types/results";
 import type { BatterLine, DismissalRecord, InningsState, MatchState } from "../types/state";
 
 export function playerName(state: MatchState, id: PlayerId | null): string {
@@ -57,11 +57,11 @@ export function describeDismissal(
 		case "BOWLED":
 			return `b ${b}`;
 		case "CAUGHT":
-			return d.fielderIds[0] === d.bowlerId ? `c & b ${b}` : `c ${f[0] ?? ""} b ${b}`;
+			return d.fielderIds[0] === d.bowlerId ? `c & b ${b}` : `c ${must(f[0], "catcher")} b ${b}`;
 		case "LBW":
 			return `lbw b ${b}`;
 		case "STUMPED":
-			return `st ${f[0] ?? ""} b ${b}`;
+			return `st ${must(f[0], "keeper")} b ${b}`;
 		case "HIT_WICKET":
 			return `hit wicket b ${b}`;
 		case "RUN_OUT":
@@ -92,7 +92,9 @@ export function resultText(state: MatchState, result: MatchResult): string {
 		case "WIN": {
 			const team = teamName(state, result.winnerTeamId);
 			const method =
-				result.method === "TARGET_REVISION" ? ` (${state.rules?.targetRevision ?? ""} method)` : "";
+				result.method === "TARGET_REVISION"
+					? ` (${must(state.rules, "rules").targetRevision} method)`
+					: "";
 			const m = result.margin;
 			switch (m.type) {
 				case "RUNS":
@@ -107,7 +109,7 @@ export function resultText(state: MatchState, result: MatchResult): string {
 					return `${team} won by ${m.wickets} wicket${m.wickets === 1 ? "" : "s"}${balls}${method}`;
 				}
 				case "NONE": {
-					const how: Record<string, string> = {
+					const how: Record<WinMethod, string> = {
 						SUPER_OVER: "the super over",
 						BOUNDARY_COUNT: "boundary count",
 						BOWL_OUT: "the bowl-out",
@@ -117,15 +119,15 @@ export function resultText(state: MatchState, result: MatchResult): string {
 						NORMAL: "decision",
 						TARGET_REVISION: "decision",
 					};
-					return `${team} won (${how[result.method] ?? ""})`;
+					return `${team} won (${how[result.method]})`;
 				}
 			}
 		}
 	}
 }
 
-const pad = (s: string, n: number): string => (s.length >= n ? s : s + " ".repeat(n - s.length));
-const lpad = (s: string, n: number): string => (s.length >= n ? s : " ".repeat(n - s.length) + s);
+const pad = (s: string, n: number): string => s.padEnd(n);
+const lpad = (s: string, n: number): string => s.padStart(n);
 const fixed = (n: number | null): string => (n === null ? "-" : n.toFixed(2));
 
 /** Plain-text scorecard for the CLI and tests. */
@@ -134,7 +136,7 @@ export function formatScorecard(state: MatchState): string {
 	for (const inn of state.innings) {
 		const label =
 			inn.kind === "SUPER_OVER"
-				? `Super over ${inn.superOverRound ?? ""}`
+				? `Super over ${must(inn.superOverRound, "round")}`
 				: `${teamName(state, inn.battingTeamId)} innings${inn.followOn ? " (following on)" : ""}`;
 		const title =
 			inn.kind === "SUPER_OVER" ? `${label}: ${teamName(state, inn.battingTeamId)}` : label;
@@ -182,10 +184,7 @@ export function deliveryCommentary(before: MatchState, event: DeliveryEvent): st
 	const inn = before.innings[before.innings.length - 1];
 	if (inn === undefined || inn.currentOver === null) return "";
 	const over = `${inn.completedOvers}.${inn.currentOver.legalBalls + 1}`;
-	const bowler = playerName(
-		before,
-		inn.currentOver.bowlerIds[inn.currentOver.bowlerIds.length - 1] ?? null,
-	);
+	const bowler = playerName(before, currentBowlerId(inn));
 	const batter = playerName(before, inn.strikerId);
 	const p = event.payload;
 	let what: string;

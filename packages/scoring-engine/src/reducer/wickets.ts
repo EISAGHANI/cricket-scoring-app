@@ -140,8 +140,10 @@ export function applyBatterIn(state: MatchState, event: BatterInEvent): void {
 	else line.status = "BATTING"; // retired hurt, resuming (R-SUB-04)
 	if (inn.strikerId === null) inn.strikerId = batterId;
 	else inn.nonStrikerId = batterId;
-	// A new partnership starts once the crease is full (one batter in Last Man Stands solo mode).
-	if (openPartnership(inn) === null && !needsBatter(inn)) {
+	// Last Man Stands: the last available batter may walk out to bat alone.
+	maybeGoSolo(state, inn);
+	// A new partnership starts once the crease is full (every vacancy closed the last one).
+	if (!needsBatter(inn) && openPartnership(inn) === null) {
 		startPartnership(inn, must(inn.strikerId, "striker"), inn.nonStrikerId);
 	}
 }

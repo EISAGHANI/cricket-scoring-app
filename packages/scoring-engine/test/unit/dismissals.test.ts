@@ -62,6 +62,13 @@ describe("dismissal matrix", () => {
 		m.rejects("DELIVERY", four, "DEAD_BALL_RUNS");
 	});
 
+	it("R-DIS-01: the ball is dead after a catch, so no runs can be recorded", () => {
+		const m = started();
+		const p = m.payloadFor("1");
+		p.dismissal = m.dismissal("CAUGHT", { fielderIds: ["b2"] });
+		m.rejects("DELIVERY", p, "DEAD_BALL_RUNS");
+	});
+
 	it("R-DIS-02: only bowler-credited kinds count to the bowler", () => {
 		expect(KINDS.filter((k) => creditsBowler(k))).toEqual([
 			"BOWLED",
@@ -231,6 +238,33 @@ describe("dismissal matrix", () => {
 	});
 });
 
+describe("dismissal edge cases", () => {
+	it("R-DIS-01: handled the ball (legacy) when enabled", () => {
+		const m = started("T20", { rules: { allowHandledTheBall: true } }).out("HANDLED_THE_BALL", {});
+		expect(format.dismissalText(m.state, m.inn, m.inn.batters[0]!)).toBe("handled the ball");
+	});
+
+	it("R-DIS-10: a dismissal between overs has no bowler at the time", () => {
+		const m = started().balls(". . . . .").out("BOWLED").endOver();
+		m.event("WICKET", { kind: "TIMED_OUT", batterId: "a3", fielderIds: [] });
+		expect(m.inn.batters[2]!.dismissal).toEqual({
+			kind: "TIMED_OUT",
+			bowlerId: null,
+			bowlerAtTimeId: null,
+			fielderIds: [],
+		});
+		expect(m.inn.overs[0]!.wickets).toBe(1);
+	});
+
+	it("R-DIS-09: two vacancies need two batters before a partnership starts", () => {
+		const m = started().out("BOWLED").event("RETIREMENT", { batterId: "a2", kind: "HURT" });
+		m.in("a3");
+		expect(m.inn.partnerships).toHaveLength(1);
+		m.in("a4");
+		expect(m.inn.partnerships[1]!.batterIds).toEqual(["a3", "a4"]);
+	});
+});
+
 describe("Last Man Stands", () => {
 	it("R-LMS-01: the last batter bats alone and keeps strike", () => {
 		const m = started("LAST_MAN_STANDS", { players: 3 }).out("BOWLED").in("a3").out("BOWLED");
@@ -242,6 +276,17 @@ describe("Last Man Stands", () => {
 		m.balls(". .").endOver();
 		expect(m.inn.strikerId).toBe("a2");
 		m.rejects("SWAP_STRIKE", { reason: "x" }, "CANNOT_SWAP");
+	});
+
+	it("R-LMS-01: a returning batter bats alone when everyone else is out", () => {
+		const m = started("LAST_MAN_STANDS", { players: 3 }).out("BOWLED").in("a3");
+		m.event("RETIREMENT", { batterId: "a2", kind: "HURT" });
+		m.event("WICKET", { kind: "RUN_OUT", batterId: "a3", fielderIds: [] });
+		expect(m.inn.strikerId).toBeNull();
+		m.in("a2");
+		expect(m.inn).toMatchObject({ soloBatting: true, strikerId: "a2", nonStrikerId: null });
+		expect(m.inn.partnerships.at(-1)!.batterIds).toEqual(["a2", null]);
+		m.balls("1");
 	});
 
 	it("R-LMS-02: all out when every player is out", () => {

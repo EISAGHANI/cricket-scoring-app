@@ -70,7 +70,8 @@ export function applyPenaltyRuns(state: MatchState, event: PenaltyRunsEvent): vo
 	);
 	const target = completed[completed.length - 1];
 	if (target === undefined) {
-		state.pendingPenaltyRuns[toTeamId] = (state.pendingPenaltyRuns[toTeamId] ?? 0) + runs;
+		state.pendingPenaltyRuns[toTeamId] =
+			must(state.pendingPenaltyRuns[toTeamId], "penalty tally") + runs;
 	} else {
 		target.runs += runs;
 		target.extras.penalties += runs;
@@ -412,7 +413,7 @@ export function applySubstitution(state: MatchState, event: SubstitutionEvent): 
 	}
 	if (
 		kind === "IMPACT" &&
-		(state.impactSubstitutionsUsed[teamId] ?? 0) >= rules.impactPlayersPerTeam
+		must(state.impactSubstitutionsUsed[teamId], "impact tally") >= rules.impactPlayersPerTeam
 	) {
 		violation("NOT_ALLOWED", "R-SUB-03", "No impact-player substitutions remain");
 	}
@@ -430,5 +431,6 @@ export function applySubstitution(state: MatchState, event: SubstitutionEvent): 
 	incoming.substitutionKind = kind;
 	if (state.keepers[teamId] === outPlayerId) state.keepers[teamId] = inPlayerId;
 	if (kind === "IMPACT")
-		state.impactSubstitutionsUsed[teamId] = (state.impactSubstitutionsUsed[teamId] ?? 0) + 1;
+		state.impactSubstitutionsUsed[teamId] =
+			must(state.impactSubstitutionsUsed[teamId], "impact tally") + 1;
 }

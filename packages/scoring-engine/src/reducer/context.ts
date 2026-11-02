@@ -42,7 +42,7 @@ export function isTeam(state: MatchState, teamId: TeamId): boolean {
 }
 
 export function player(state: MatchState, id: PlayerId): PlayerState | null {
-	return Object.hasOwn(state.players, id) ? (state.players[id] ?? null) : null;
+	return Object.hasOwn(state.players, id) ? must(state.players[id], "player") : null;
 }
 
 /** Player is on the team and currently part of its active XI. */
@@ -119,8 +119,9 @@ export function needsBowler(inn: InningsState): boolean {
 }
 
 export function currentBowlerId(inn: InningsState): PlayerId | null {
-	const ids = inn.currentOver?.bowlerIds;
-	return ids === undefined ? null : (ids[ids.length - 1] ?? null);
+	const over = inn.currentOver;
+	if (over === null) return null; // between overs
+	return must(over.bowlerIds[over.bowlerIds.length - 1], "bowler");
 }
 
 /** Overs notation "O.B" (R-OV-07). */

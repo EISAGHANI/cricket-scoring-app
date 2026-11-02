@@ -69,7 +69,6 @@ export function closeInnings(
 
 /** R-INN-02: close the innings automatically when an end condition is met. */
 export function checkInningsEnd(state: MatchState, inn: InningsState): void {
-	if (inn.status !== "IN_PROGRESS") return;
 	if (inn.target !== null && inn.runs >= inn.target) return closeInnings(state, inn, "TARGET");
 	if (inn.wickets >= inn.maxWickets) return closeInnings(state, inn, "ALL_OUT");
 	if (inn.maxOvers !== null) {
@@ -191,8 +190,8 @@ export function tieBreakPending(state: MatchState): "SUPER_OVER" | "BOWL_OUT" | 
 	const rules = requireRules(state);
 	if (state.result !== null || state.provisionalResult !== null) return null;
 	if (!regulationTied(state)) return null;
-	if (rules.tieBreaker === "BOWL_OUT") return state.bowlOutWinnerId === null ? "BOWL_OUT" : null;
-	if (rules.tieBreaker === "NONE") return null;
+	// Any other outcome (NONE, a bowl-out result, a decided super over) is already a provisional result.
+	if (rules.tieBreaker === "BOWL_OUT") return "BOWL_OUT";
 	const round = state.superOverRound;
 	if (round === 0) return "SUPER_OVER";
 	const inRound = state.innings.filter((i) => i.superOverRound === round);
