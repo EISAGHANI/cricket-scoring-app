@@ -36,8 +36,10 @@ jobs:
       - name: Lint, typecheck, test
         run: pnpm turbo run lint typecheck test
 
-      - name: Engine coverage (100% required)
+      - name: Engine coverage (100% required) with 1,000 property runs
         run: pnpm turbo run test:coverage --filter=@cricket/scoring-engine
+        env:
+          PROPERTY_RUNS: "1000"
 
       - name: Build
         run: pnpm turbo run build

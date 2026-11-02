@@ -7,22 +7,22 @@ Lightweight ADRs. Each entry: context → decision → consequences. Status is o
 > phase that depends on them starts (brief §0.7: stack changes, paid services, irreversible
 > data-model choices).
 
-| #    | Title                                                    | Status   | Blocks  |
-| ---- | -------------------------------------------------------- | -------- | ------- |
-| 0001 | pnpm workspaces + Turborepo monorepo                     | Accepted | —       |
-| 0002 | Keep the existing "Crease" app as the seed of apps/web   | Accepted | —       |
-| 0003 | Drizzle ORM over Prisma                                  | Accepted | —       |
-| 0004 | Better Auth over Auth.js                                 | Accepted | —       |
-| 0005 | Event-sourced scoring: refinements to brief §4           | Accepted | —       |
-| 0006 | Engine has zero runtime deps; Zod lives in `schemas`     | Accepted | —       |
-| 0007 | Internal packages ship TypeScript source (no build)      | Accepted | —       |
-| 0008 | TypeScript 5.9, not 7.x                                  | Accepted | —       |
-| 0009 | ESLint 9 (maintenance line), not 10                      | Accepted | —       |
-| 0010 | RustFS instead of MinIO for local S3                     | Accepted | —       |
-| 0011 | UUIDv7 for all primary keys                              | Accepted | —       |
-| 0012 | Golden-test data from Cricsheet                          | Accepted | —       |
-| 0013 | DLS-style resource table is external data, not code      | Accepted | —       |
-| 0014 | Tenancy model: organisation = tenant; players are global | Accepted | —       |
+| #    | Title                                                    | Status   | Blocks |
+| ---- | -------------------------------------------------------- | -------- | ------ |
+| 0001 | pnpm workspaces + Turborepo monorepo                     | Accepted | —      |
+| 0002 | Keep the existing "Crease" app as the seed of apps/web   | Accepted | —      |
+| 0003 | Drizzle ORM over Prisma                                  | Accepted | —      |
+| 0004 | Better Auth over Auth.js                                 | Accepted | —      |
+| 0005 | Event-sourced scoring: refinements to brief §4           | Accepted | —      |
+| 0006 | Engine has zero runtime deps; Zod lives in `schemas`     | Accepted | —      |
+| 0007 | Internal packages ship TypeScript source (no build)      | Accepted | —      |
+| 0008 | TypeScript 5.9, not 7.x                                  | Accepted | —      |
+| 0009 | ESLint 9 (maintenance line), not 10                      | Accepted | —      |
+| 0010 | RustFS instead of MinIO for local S3                     | Accepted | —      |
+| 0011 | UUIDv7 for all primary keys                              | Accepted | —      |
+| 0012 | Golden-test data from Cricsheet                          | Accepted | —      |
+| 0013 | DLS-style resource table is external data, not code      | Accepted | —      |
+| 0014 | Tenancy model: organisation = tenant; players are global | Accepted | —      |
 
 ---
 

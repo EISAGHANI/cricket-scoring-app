@@ -3,8 +3,8 @@
 Cricket scoring & league platform (CricClubs + CricHeroes class). The full brief is
 `docs/PROJECT_BRIEF.md`. Read it before starting a phase.
 
-**Current phase:** 0 complete (foundation). Phase 1 (scoring engine) is planned in
-`docs/PHASE_1_PLAN.md` and **awaiting owner approval**. Don't write feature code before it's approved.
+**Current phase:** 1 complete (scoring engine, `packages/scoring-engine`). Next: Phase 2 (auth,
+users, teams, players). Plan each phase and get owner approval before writing its feature code.
 
 ## Working rules (from the brief, condensed)
 
@@ -28,16 +28,20 @@ Cricket scoring & league platform (CricClubs + CricHeroes class). The full brief
 
 ## Commands
 
-| Command                                               | What                                                               |
-| ----------------------------------------------------- | ------------------------------------------------------------------ |
-| `corepack enable pnpm`                                | One-time: put pnpm 12 on PATH (needed by turbo)                    |
-| `pnpm install`                                        | Install all workspaces                                             |
-| `pnpm infra:up` / `infra:down` / `infra:reset`        | Docker Compose: Postgres, Redis, RustFS (S3), Mailpit              |
-| `pnpm dev`                                            | All apps in dev mode (web :3000, realtime :4001, worker :4002)     |
-| `pnpm check`                                          | lint + typecheck + test + format check (what CI runs, minus build) |
-| `pnpm build`                                          | Production builds                                                  |
-| `pnpm --filter @cricket/scoring-engine test:coverage` | Engine tests with 100% coverage gate                               |
-| `pnpm format`                                         | Prettier write                                                     |
+| Command                                                                         | What                                                               |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `corepack enable pnpm`                                                          | One-time: put pnpm 12 on PATH (needed by turbo)                    |
+| `pnpm install`                                                                  | Install all workspaces                                             |
+| `pnpm infra:up` / `infra:down` / `infra:reset`                                  | Docker Compose: Postgres, Redis, RustFS (S3), Mailpit              |
+| `pnpm dev`                                                                      | All apps in dev mode (web :3000, realtime :4001, worker :4002)     |
+| `pnpm check`                                                                    | lint + typecheck + test + format check (what CI runs, minus build) |
+| `pnpm build`                                                                    | Production builds                                                  |
+| `pnpm --filter @cricket/scoring-engine test:coverage`                           | Engine tests with 100% coverage gate                               |
+| `PROPERTY_RUNS=1000 pnpm --filter @cricket/scoring-engine test`                 | Deeper property sweep (default 150; CI uses 1000)                  |
+| `pnpm --filter @cricket/scoring-engine replay <log.json> [--json] [--at <seq>]` | Scorecard from an event log                                        |
+| `pnpm --filter @cricket/scoring-engine replay <file.json> --cricsheet`          | Scorecard from Cricsheet data                                      |
+| `pnpm --filter @cricket/scoring-engine bench`                                   | Replay timings over the golden matches                             |
+| `pnpm format`                                                                   | Prettier write                                                     |
 
 Local URLs: Mailpit UI http://localhost:8025 · RustFS console http://localhost:9001 ·
 Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_test`).
@@ -52,24 +56,34 @@ Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_
   `process.env` elsewhere.
 - In `apps/web`: routes in `app/` stay thin → `features/<area>/` (UI + `actions.ts` +
   `service.ts`) → `@cricket/db` repositories. Permission checks (`can()`) live in services.
-- Engine tests cite rule IDs from `docs/CRICKET_RULES.md` in their names (`"R-EXT-02: …"`).
+- Engine tests cite rule IDs from `docs/CRICKET_RULES.md` in their names (`"R-EXT-02: …"`);
+  `test/rules-coverage.test.ts` fails if a spec rule is uncited or a test cites an unknown one.
+  Changing engine behaviour means changing the spec in the same commit.
+- Engine source: no `!` non-null assertions and no coverage-ignore comments. Use `must()` for
+  values the engine's invariants guarantee and `violation()` for rule breaches. ESLint bans
+  `Date`, `Math.random`, `process` and I/O imports in `src/`.
+- Engine tests use the scorebook DSL in `test/dsl.ts`:
+  `started().balls("1 4! wd").out("CAUGHT", { fielderIds: ["b2"] }).in("a3")`.
 - Exact versions pinned for tooling and core libs; bump deliberately.
 
 ## Domain glossary
 
-| Term       | Meaning                                                                              |
-| ---------- | ------------------------------------------------------------------------------------ |
-| Legal ball | Not a wide or no-ball; counts toward the over                                        |
-| Extras     | Wides, no-balls, byes, leg byes, penalty runs                                        |
-| Free hit   | Delivery after a no-ball; batter can only be out run out / obstructing / hit twice   |
-| FoW        | Fall of wicket: score and over at each dismissal                                     |
-| NRR        | Net run rate; all-out sides count as having faced their full overs                   |
-| DLS        | Rain-rule target revision (our impl is "DLS Standard-style", table supplied as data) |
-| Super over | One-over-per-side tie-breaker                                                        |
-| Follow-on  | Multi-day: the side trailing by ≥ margin can be made to bat again immediately        |
-| LMS        | Last Man Stands format: the last batter bats alone                                   |
-| Set        | The Hundred's 5-ball "over"                                                          |
-| Projection | Read model built from events by the worker; always rebuildable                       |
+| Term               | Meaning                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| Legal ball         | Not a wide or no-ball; counts toward the over                                        |
+| Extras             | Wides, no-balls, byes, leg byes, penalty runs                                        |
+| Free hit           | Delivery after a no-ball; batter can only be out run out / obstructing / hit twice   |
+| FoW                | Fall of wicket: score and over at each dismissal                                     |
+| NRR                | Net run rate; all-out sides count as having faced their full overs                   |
+| DLS                | Rain-rule target revision (our impl is "DLS Standard-style", table supplied as data) |
+| Super over         | One-over-per-side tie-breaker                                                        |
+| Follow-on          | Multi-day: the side trailing by ≥ margin can be made to bat again immediately        |
+| LMS                | Last Man Stands format: the last batter bats alone                                   |
+| Set                | The Hundred's 5-ball "over"                                                          |
+| Projection         | Read model built from events by the worker; always rebuildable                       |
+| Effective log      | The event log after resolving UNDO/CORRECTION (`resolveLog`)                         |
+| Provisional result | Result computed from play; final once `MATCH_RESULT` confirms it                     |
+| Golden match       | Real match (Cricsheet) replayed and checked against an independent oracle            |
 
 ## Gotchas
 
@@ -87,3 +101,10 @@ Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_
 - `next dev` rewrites `apps/web/AGENTS.md`; commit it as-is rather than editing it.
 - Two engines exist until Phase 3: the legacy one in `apps/web/lib/cricket` (used by the
   current UI) and the new `@cricket/scoring-engine`. Don't mix them (ADR-0002).
+- **Run Prettier from the repo root.** Inside a package it ignores the root `.prettierignore`
+  and reformats the minified Cricsheet fixtures.
+- **Vitest 5 changed `bench`** (fixture-based); the engine benchmark is `tools/bench.ts` (tsx).
+- Property-test failures print a seed; reproduce with `generateMatch(seed, preset)` from
+  `packages/scoring-engine/test/property/generator.ts`.
+- The Hundred's no-ball is 2 runs, and the boundary-count tie-breaker counts only fours and
+  sixes off the bat. Both were confirmed against real match data.

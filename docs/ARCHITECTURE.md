@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 0** (foundation). Diagrams show the target architecture; the "Where we are" table
+Status: **Phase 1** (scoring engine) complete. Diagrams show the target architecture; the "Where we are" table
 shows what exists today.
 
 ## 1. System overview
@@ -150,17 +150,17 @@ mutation writes `audit_log`.
 | Redis         | Managed (Upstash / Railway)                             | self-hosted                      |
 | Storage       | Cloudflare R2                                           | any S3                           |
 
-## 8. Where we are (end of Phase 0)
+## 8. Where we are (end of Phase 1)
 
-| Path                       | State                                                                     |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `apps/web`                 | Legacy local-first "Crease" app, working (ADR-0002); env validation added |
-| `apps/realtime`            | Skeleton: env validation + `/healthz`                                     |
-| `apps/worker`              | Skeleton: env validation + `/healthz`                                     |
-| `packages/scoring-engine`  | Empty, with coverage gates configured (100%) — **Phase 1**                |
-| `packages/schemas`         | Empty — Phase 1 (event schemas)                                           |
-| `packages/db`              | Empty; schema draft in `docs/DATA_MODEL.md` — Phase 2                     |
-| `packages/ui`              | Empty — Phase 3+                                                          |
-| `packages/config`          | Shared tsconfig bases + ESLint flat config                                |
-| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit              |
-| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                     |
+| Path                       | State                                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `apps/web`                 | Legacy local-first "Crease" app, working (ADR-0002); env validation added                |
+| `apps/realtime`            | Skeleton: env validation + `/healthz`                                                    |
+| `apps/worker`              | Skeleton: env validation + `/healthz`                                                    |
+| `packages/scoring-engine`  | **Done**: reducer, replay, undo/corrections, all spec rules, metrics, CLI (100% covered) |
+| `packages/schemas`         | Zod event/rules/result schemas, type-locked to the engine                                |
+| `packages/db`              | Empty; schema draft in `docs/DATA_MODEL.md` — Phase 2                                    |
+| `packages/ui`              | Empty — Phase 3+                                                                         |
+| `packages/config`          | Shared tsconfig bases + ESLint flat config                                               |
+| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit                             |
+| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                                    |

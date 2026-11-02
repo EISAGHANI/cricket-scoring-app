@@ -21,6 +21,7 @@
       "persistent": true
     },
     "test:coverage": {
+      "env": ["PROPERTY_RUNS"],
       "outputs": ["coverage/**"]
     }
   }

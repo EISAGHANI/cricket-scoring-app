@@ -5,7 +5,7 @@
 line/branch coverage, plus a CLI that replays an event-log JSON and prints the scorecard.
 No UI, DB or network.
 
-**Status: awaiting approval.** Nothing below is implemented yet.
+**Status: complete (2026-11-02).** Approved with the default answers to Q1–Q5; outcome in §11.
 
 ---
 
@@ -202,3 +202,19 @@ aggregates (Phase 5), points table (Phase 6, though the NRR formula ships now).
 - `CLAUDE.md` (glossary, gotchas) and `CRICKET_RULES.md` (any rule clarifications) updated;
   new ADRs for anything decided along the way.
 - Phase summary: what was built, how to run it, what's tested, known gaps.
+
+## 11. Outcome
+
+- 204 engine tests: rule-cited unit tests, property tests (1,000 generated matches per invariant
+  in CI), five golden matches, and a rule-coverage gate. 100% statements, branches, functions
+  and lines, with no coverage-ignore comments.
+- Golden matches reproduce published scorecards, checked against an oracle built independently
+  from raw Cricsheet deliveries.
+- A full Test match replays in about 1 ms (target: 50 ms).
+- Deviations: the benchmark is a tsx script (Vitest 5 changed `bench`); golden data is converted
+  at test time by `tools/cricsheet/convert.ts`.
+- Bugs found by property and golden tests, and fixed: a missing partnership and missing solo mode
+  when a Last Man Stands batter came back in; bowler figures dropped when an unbowled over was
+  abandoned. Rule corrections from real data: Hundred no-ball = 2 runs; boundary count = off the
+  bat only.
+- Known gaps: `docs/CRICKET_RULES.md` §17.
