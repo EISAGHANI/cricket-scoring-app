@@ -7,3 +7,4 @@ pnpm-lock.yaml
 docs/PROJECT_BRIEF.md
 apps/web/AGENTS.md
 apps/web/next-env.d.ts
+packages/scoring-engine/test/golden/cricsheet/*.json

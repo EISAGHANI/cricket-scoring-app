@@ -89,7 +89,7 @@ describe("extras", () => {
 	it("R-EXT-02: a wide to the boundary is the penalty plus four", () => {
 		const m = started().balls("4wd!");
 		expect(m.inn.runs).toBe(5);
-		expect(m.inn.boundaries).toBe(1);
+		expect(m.inn.boundaries).toBe(0); // not a boundary off the bat
 		const custom = started("T20", { rules: { wideRuns: 2 } }).balls("wd");
 		expect(custom.inn.runs).toBe(2);
 	});

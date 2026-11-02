@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "bench": "vitest bench --run",
+    "bench": "tsx tools/bench.ts",
     "replay": "tsx tools/cli.ts"
   },
   "devDependencies": {

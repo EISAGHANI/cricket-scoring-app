@@ -152,7 +152,7 @@ export interface InningsState {
 	target: number | null;
 	targetRevised: boolean;
 	followOn: boolean;
-	/** Boundaries (any 4 or 6 allowance) — used by the boundary-count tie-breaker. */
+	/** Fours and sixes off the bat (not extras or overthrows) — the boundary-count tie-breaker. */
 	boundaries: number;
 	suspendedBowlerIds: PlayerId[];
 	reductions: OversReduction[];

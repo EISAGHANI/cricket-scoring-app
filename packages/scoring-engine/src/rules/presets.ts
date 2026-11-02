@@ -99,6 +99,7 @@ export const PRESETS: Readonly<Record<PresetId, MatchRules>> = {
 		ballsPerOver: 5,
 		oversPerInnings: 20,
 		bowlerMaxBalls: 20,
+		noBallRuns: 2,
 		maxConsecutiveOvers: 2,
 		oversPerEnd: 2,
 		superOverBalls: 5,

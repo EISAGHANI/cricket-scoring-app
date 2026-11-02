@@ -238,7 +238,8 @@ export function applyDelivery(state: MatchState, event: DeliveryEvent): void {
 	inn.extras.byes += s.extras.byes;
 	inn.extras.legByes += s.extras.legByes;
 	inn.extras.penalties += s.extras.penalties;
-	if (p.boundary !== null) inn.boundaries++;
+	// Boundary-count tie-breaker counts fours and sixes off the bat (2019 World Cup final: 26–17).
+	if (s.batterBoundary !== null) inn.boundaries++;
 	if (s.legal) inn.legalBalls++;
 
 	// Over.
