@@ -1,6 +1,6 @@
 # Architecture
 
-Status: **Phase 1** (scoring engine) complete. Diagrams show the target architecture; the "Where we are" table
+Status: **Phase 2** (auth, people, teams) complete. Diagrams show the target architecture; the "Where we are" table
 shows what exists today.
 
 ## 1. System overview
@@ -113,13 +113,14 @@ TanStack Query handles server state everywhere else.
 
 ```mermaid
 flowchart TB
-  web["apps/web"] --> engine & schemas & db & ui
+  web["apps/web"] --> engine & schemas & db & ui & authz
   realtime["apps/realtime"] --> schemas
   worker["apps/worker"] --> engine & schemas & db
   db["packages/db"] --> schemas
   schemas["packages/schemas"] -. "type-equality test" .-> engine
   ui["packages/ui"] --> engine
   engine["packages/scoring-engine<br/>(no runtime deps)"]
+  authz["packages/authz<br/>(pure policy)"]
   config["packages/config"] -.-> web & realtime & worker & db & schemas & ui & engine
 ```
 
@@ -150,17 +151,18 @@ mutation writes `audit_log`.
 | Redis         | Managed (Upstash / Railway)                             | self-hosted                      |
 | Storage       | Cloudflare R2                                           | any S3                           |
 
-## 8. Where we are (end of Phase 1)
+## 8. Where we are (end of Phase 2)
 
-| Path                       | State                                                                                    |
-| -------------------------- | ---------------------------------------------------------------------------------------- |
-| `apps/web`                 | Legacy local-first "Crease" app, working (ADR-0002); env validation added                |
-| `apps/realtime`            | Skeleton: env validation + `/healthz`                                                    |
-| `apps/worker`              | Skeleton: env validation + `/healthz`                                                    |
-| `packages/scoring-engine`  | **Done**: reducer, replay, undo/corrections, all spec rules, metrics, CLI (100% covered) |
-| `packages/schemas`         | Zod event/rules/result schemas, type-locked to the engine                                |
-| `packages/db`              | Empty; schema draft in `docs/DATA_MODEL.md` — Phase 2                                    |
-| `packages/ui`              | Empty — Phase 3+                                                                         |
-| `packages/config`          | Shared tsconfig bases + ESLint flat config                                               |
-| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit                             |
-| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                                    |
+| Path                       | State                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `apps/web`                 | Sign-in, accounts, leagues, clubs, teams, squads, players, claims, invitations, uploads; legacy scorer at `/local` |
+| `apps/realtime`            | Skeleton: env validation + `/healthz`                                                                              |
+| `apps/worker`              | Skeleton: env validation + `/healthz`                                                                              |
+| `packages/scoring-engine`  | **Done**: reducer, replay, undo/corrections, all spec rules, metrics, CLI (100% covered)                           |
+| `packages/schemas`         | Zod event/rules/result schemas, type-locked to the engine                                                          |
+| `packages/db`              | Drizzle schema + migrations (Phase 2 tables), test-database helpers                                                |
+| `packages/authz`           | Pure permission policy (`can`) and player privacy rules, 100% covered                                              |
+| `packages/ui`              | Empty — Phase 3+                                                                                                   |
+| `packages/config`          | Shared tsconfig bases + ESLint flat config                                                                         |
+| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit                                                       |
+| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                                                              |

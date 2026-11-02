@@ -3,8 +3,9 @@
 Ball-by-ball cricket scoring, live scores, player careers and league management in one platform.
 Offline-first scorer PWA, real-time fan experience, multi-tenant league websites.
 
-> Status: **Phase 0 (foundation) complete.** The current `apps/web` is the earlier local-first
-> "Crease" scorer (see `apps/web/README.legacy.md`), kept as the starting point for the new web app.
+> Status: **Phase 2 complete**: scoring engine, passwordless sign-in, permissions, leagues, clubs,
+> teams, player profiles, invitations and uploads. The earlier local-first scorer lives at
+> `/local` until Phase 3 brings server-backed matches.
 
 ## Quick start
 
@@ -14,8 +15,12 @@ Requires Node 24 (see `.nvmrc`) and Docker.
 corepack enable pnpm          # one-time
 pnpm install
 pnpm infra:up                 # Postgres, Redis, S3 (RustFS), Mailpit
-cp apps/web/.env.example apps/web/.env.local
-pnpm dev                      # http://localhost:3000
+cp apps/web/.env.example apps/web/.env.local     # then set BETTER_AUTH_SECRET
+cp packages/db/.env.example packages/db/.env
+pnpm --filter @cricket/db db:migrate
+pnpm --filter @cricket/web storage:init
+pnpm --filter @cricket/web db:seed --reset      # optional demo data
+pnpm dev                      # http://localhost:3000 — sign-in codes arrive at http://localhost:8025
 ```
 
 `pnpm check` runs lint, typecheck, tests and the format check.
@@ -29,6 +34,7 @@ apps/worker            BullMQ workers: projections, notifications (Phase 5)
 packages/scoring-engine  Pure TypeScript cricket engine (Phase 1)
 packages/schemas       Shared Zod schemas
 packages/db            Schema, migrations, repositories (Phase 2)
+packages/authz         Permissions (policy as data) and privacy rules
 packages/ui            Shared components
 packages/config        tsconfig + ESLint presets
 infra/                 docker-compose and Postgres init
@@ -42,4 +48,4 @@ docs/                  Brief, architecture, decisions, cricket rules, data model
 - [Decisions (ADRs)](docs/DECISIONS.md)
 - [Cricket rules spec](docs/CRICKET_RULES.md)
 - [Data model draft](docs/DATA_MODEL.md)
-- [Phase 1 plan](docs/PHASE_1_PLAN.md)
+- [Phase 1 plan](docs/PHASE_1_PLAN.md) · [Phase 2 plan](docs/PHASE_2_PLAN.md)

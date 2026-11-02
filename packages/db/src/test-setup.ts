@@ -1,7 +1,11 @@
 import { runMigrations } from "./migrate";
-import { TEST_DATABASE_URL } from "./testing";
+import { ensureDatabase, testDatabaseUrl } from "./testing";
 
-/** Vitest global setup: bring the test database up to date once per run. */
+export const TEST_DB_NAME = "cricket_test_db";
+
+/** Vitest global setup: create and migrate this package's test database once per run. */
 export default async function setup(): Promise<void> {
-	await runMigrations(TEST_DATABASE_URL);
+	const url = testDatabaseUrl(TEST_DB_NAME);
+	await ensureDatabase(url);
+	await runMigrations(url);
 }

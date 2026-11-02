@@ -11,7 +11,8 @@ export default defineConfig({
 		fileParallelism: false,
 		testTimeout: 20_000,
 		env: {
-			DATABASE_URL: "postgres://cricket:cricket@localhost:5432/cricket_test",
+			TEST_DB_NAME: "cricket_test_web",
+			DATABASE_URL: "postgres://cricket:cricket@localhost:5432/cricket_test_web",
 			BETTER_AUTH_SECRET: "test-secret-test-secret-test-secret-00",
 		},
 	},

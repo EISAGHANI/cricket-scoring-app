@@ -3,8 +3,9 @@
 Cricket scoring & league platform (CricClubs + CricHeroes class). The full brief is
 `docs/PROJECT_BRIEF.md`. Read it before starting a phase.
 
-**Current phase:** 1 complete (scoring engine, `packages/scoring-engine`). Next: Phase 2 (auth,
-users, teams, players). Plan each phase and get owner approval before writing its feature code.
+**Current phase:** 2 complete (auth, RBAC, organisations, clubs, teams, players, invitations,
+uploads). Next: Phase 3 (match setup + scorer PWA, online). Plan each phase and get owner approval
+before writing its feature code.
 
 ## Working rules (from the brief, condensed)
 
@@ -23,8 +24,10 @@ users, teams, players). Plan each phase and get owner approval before writing it
   (offline, instant) and the server (authoritative). Undo/corrections are events.
 - `apps/web` Next.js (RSC, Server Actions) · `apps/realtime` Socket.IO + Redis ·
   `apps/worker` BullMQ projections/notifications · Postgres · Redis · S3.
-- Packages: `scoring-engine` (zero runtime deps), `schemas` (Zod), `db` (Drizzle, pending ADR),
-  `ui`, `config`.
+- Packages: `scoring-engine` (zero runtime deps), `schemas` (Zod), `db` (Drizzle schema,
+  migrations, test helpers), `authz` (pure `can()` + privacy rules), `ui`, `config`.
+- Auth: Better Auth (passwordless) in `apps/web/lib/auth`; the session DAL is
+  `lib/auth/session.ts` (`getCurrentUser`, `getSubject`, `requireUser`).
 
 ## Commands
 
@@ -41,10 +44,16 @@ users, teams, players). Plan each phase and get owner approval before writing it
 | `pnpm --filter @cricket/scoring-engine replay <log.json> [--json] [--at <seq>]` | Scorecard from an event log                                        |
 | `pnpm --filter @cricket/scoring-engine replay <file.json> --cricsheet`          | Scorecard from Cricsheet data                                      |
 | `pnpm --filter @cricket/scoring-engine bench`                                   | Replay timings over the golden matches                             |
+| `pnpm --filter @cricket/db db:migrate` / `db:generate` / `db:check`             | Apply / generate / check migrations (reads `packages/db/.env`)     |
+| `pnpm --filter @cricket/web storage:init`                                       | Create the media bucket (public read of `media/*` only)            |
+| `pnpm --filter @cricket/web db:seed --reset`                                    | Demo data: league, 2 clubs, 8 teams × 15 players, a user per role  |
+| `pnpm --filter @cricket/web test:e2e`                                           | Playwright at 375 px against the local stack (codes via Mailpit)   |
 | `pnpm format`                                                                   | Prettier write                                                     |
 
 Local URLs: Mailpit UI http://localhost:8025 · RustFS console http://localhost:9001 ·
-Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_test`).
+Postgres `postgres://cricket:cricket@localhost:5432/cricket`. Integration tests create their own
+databases (`cricket_test_db`, `cricket_test_web`). Seeded logins: `admin@`, `league@`, `club1@`,
+`manager1@`, `captain1@cricket.local` (codes arrive in Mailpit).
 
 ## Conventions
 
@@ -54,8 +63,18 @@ Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_
 - Workspace packages export TS source (`"exports": { ".": "./src/index.ts" }`); there's no build step.
 - Env: each app has `.env.example` and a Zod-validated `env.ts` that fails fast. Never read
   `process.env` elsewhere.
-- In `apps/web`: routes in `app/` stay thin → `features/<area>/` (UI + `actions.ts` +
-  `service.ts`) → `@cricket/db` repositories. Permission checks (`can()`) live in services.
+- In `apps/web`: routes in `app/` stay thin → `features/<area>/`:
+  - `service.ts`: plain functions `(ctx: { db, subject }, input)`; Zod-parse input, `authorize()`,
+    transaction, `audit()`. No Next.js or `server-only` imports, so integration tests call them
+    directly against real Postgres.
+  - `actions.ts` (`"use server"`): `toResult(() => service(await serviceContext(), formObject(form)))`,
+    then `updateTag(...)` for cached data or `refresh()` for per-viewer data.
+  - `queries.ts` (`server-only`): public reads use `"use cache"` + `cacheTag` (by id and slug);
+    viewer-specific reads are uncached.
+  - Pages: synchronous page component, async child inside `<Suspense>` awaits `params` /
+    `searchParams`; viewer-specific controls in their own Suspense boundary using `viewerCan()`.
+- Player names/photos always go through `playerView()` (minors and team-only profiles).
+- Shell heredocs mangle backslashes: write files containing `\` with an editor, not `cat <<EOF`.
 - Engine tests cite rule IDs from `docs/CRICKET_RULES.md` in their names (`"R-EXT-02: …"`);
   `test/rules-coverage.test.ts` fails if a spec rule is uncited or a test cites an unknown one.
   Changing engine behaviour means changing the spec in the same commit.
@@ -108,3 +127,18 @@ Postgres `postgres://cricket:cricket@localhost:5432/cricket` (test DB: `cricket_
   `packages/scoring-engine/test/property/generator.ts`.
 - The Hundred's no-ball is 2 runs, and the boundary-count tie-breaker counts only fours and
   sixes off the bat. Both were confirmed against real match data.
+- **Session reads call `connection()`** (`getCurrentUser`, `todayIso`): Better Auth checks
+  expiry with `Date.now()`, which Cache Components rejects during (runtime) prerendering.
+- **Next 16 keeps visited routes in the DOM, hidden.** In Playwright use
+  `getByLabel(...).filter({ visible: true })`; `getByRole` already skips hidden elements. A
+  select's accessible name includes its selected option and the field hint, so prefer
+  substring or anchored-regex labels over `exact: true`.
+- **Better Auth rate-limits sign-in** (its own defaults plus ours in `lib/auth/auth.ts`); E2E
+  raises them with `AUTH_CODE_REQUESTS_PER_MINUTE`.
+- **Only one `next dev` per app directory.** Stop a stray one by the PID in
+  `apps/web/.next/dev/lock` (never kill all node processes).
+- `ui.tsx` is a client module: server components can render its components but can't call its
+  functions (e.g. `cx`).
+- Server Actions accept 5 MB bodies (image uploads); Vercel caps requests at 4.5 MB, so uploads
+  are limited to 4 MB.
+- "Better Auth … Error: aborted" in dev logs is a client that navigated away mid-request; harmless.

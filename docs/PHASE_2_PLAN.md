@@ -4,7 +4,7 @@
 requests, image uploads, all backed by Postgres, with permissions enforced server-side and every
 admin action audited.
 
-**Status: awaiting approval.** Nothing below is implemented yet.
+**Status: complete (2026-11-02).** Approved with the default answers to Q1–Q6; outcome in §10.
 
 ---
 
@@ -129,3 +129,23 @@ players and teams. Tenant-owned tables carry `organization_id NOT NULL`.
 Match creation and scoring (Phase 3), realtime and offline (Phase 4), stats and duplicate-player
 merges (Phase 5), leagues, tournaments and payments (Phase 6), GDPR data export and account
 deletion (Phase 8, though the schema supports it now).
+
+## 10. Outcome
+
+- **Delivered:** M1–M9 as planned. Passwordless sign-in (email code, magic link, phone code via
+  a dev SMS sender, Google when configured); policy-as-data permissions with tenant isolation;
+  organisations, clubs, teams, squads with captaincy roles; player profiles with privacy for
+  minors and team-only profiles; claims; invitations by email/phone and join requests; image
+  uploads; security headers; demo seed.
+- **Tests:** `authz` 66 (100% coverage); web 54 unit + integration on real Postgres, including
+  tenant isolation; db 5; Playwright E2E 14 at 375 px against the full local stack (CI runs
+  Postgres, Mailpit and RustFS as services).
+- **Deviations:** uploads go through the server and are re-encoded instead of presigned PUTs
+  (ADR-0015); CSP without nonces because of Cache Components (ADR-0016); minors' age computed at
+  read time instead of a stored flag.
+- **Bugs found and fixed along the way:** session reads during runtime prerendering (Date.now),
+  a phone number leaking into an auto-created player name, wildcard injection in name search,
+  parallel test runs resetting each other's database.
+- **Known gaps:** no UI yet to grant admin/manager roles to other users (creators and squads
+  only); venue management has services but no pages (Phase 3 match setup needs it); no real SMS
+  provider (Q1); replaced images are not yet deleted from storage; GDPR export/deletion is Phase 8.

@@ -1,8 +1,8 @@
-# Data Model — initial draft (for review)
+# Data Model
 
-**Status: draft, not migrated.** Nothing here exists in a database yet. Tables are implemented
-in the phase noted, as Drizzle schema + checked-in SQL migrations (pending ADR-0003).
-Decisions that are hard to reverse are flagged **🔒** and need owner sign-off.
+**Status:** Phase 2 tables are implemented (`packages/db/src/schema`, migrations in
+`packages/db/migrations`). Later phases' tables below remain a draft. Decisions that are hard to
+reverse are flagged **🔒**.
 
 Conventions:
 
@@ -181,3 +181,21 @@ gets decided with `EXPLAIN` in Phase 5.
    to `PRIVATE_TO_TEAM` when `is_minor`. The public scorecard shows "J. Smith" (initial + surname)
    and no photo until guardian consent is recorded.
 4. **Teams outside a club** (pick-up/box cricket teams): allowed (`club_id` nullable). OK?
+
+## 4. Implementation notes (Phase 2)
+
+- **Implemented:** `users`, `sessions`, `accounts`, `verifications`, `rate_limits` (Better Auth),
+  `role_assignments`, `audit_log`, `consents`, `organizations`, `venues`, `clubs`, `teams`,
+  `team_players`, `players`, `player_claims`, `invitations`, `join_requests`, `media_assets`.
+- **`players.is_minor` is not stored.** Age is computed at read time (`@cricket/authz`
+  `isMinor`) so it can never go stale; the planned nightly job is unnecessary.
+- **Squad roles drive authz roles:** a claimed player in a squad holds `PLAYER` on that team, and
+  the captain also `CAPTAIN` (kept in sync by `features/players/service.ts`). `TEAM_MANAGER` is
+  granted separately.
+- **Invitations** store `token_hash` (SHA-256), `squad_role`, optional `player_id` (an unclaimed
+  profile to hand over), `accepted_by/at`; acceptance requires a matching email or phone.
+- **Phone-only accounts** get a placeholder email `<digits>@phone.cricket.invalid`, never shown.
+- **Media:** only processed WebP variants are stored (`media_assets.variants`), keyed under
+  `media/<owner>/<id>/<uuid>/<size>.webp` (ADR-0015).
+- **Deferred:** `player_merges` (Phase 5, with stats), keeper/admin management UI for
+  `role_assignments` beyond creators and squads.
