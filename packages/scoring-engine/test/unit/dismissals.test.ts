@@ -112,7 +112,7 @@ describe("dismissal matrix", () => {
 		expect(format.dismissalText(m.state, m.inn, m.inn.batters[0]!)).toBe("st †B11 b B1");
 	});
 
-	it("R-DIS-05: run out keeps completed runs; survivor stays at the other end", () => {
+	it("R-DIS-05 R-STR-07: run out keeps completed runs; survivor stays at the other end", () => {
 		const striker = started().out("RUN_OUT", {
 			ball: "1",
 			end: "STRIKER",

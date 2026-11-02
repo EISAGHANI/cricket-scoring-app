@@ -1,377 +1,374 @@
 # Cricket Rules Specification (scoring engine)
 
-This is the **specification** for `@cricket/scoring-engine`. Every rule has a stable ID
-(`R-…`). Every test names the rule IDs it covers (`it("R-EXT-03: wide to boundary scores 5")`),
-and Phase 1 isn't done until every ID has at least one test.
+This is the **specification** for `@cricket/scoring-engine`. Every rule has a stable ID (`R-…`).
+Tests cite the IDs they cover in their names (`it("R-EXT-02: …")`), and
+`test/rules-coverage.test.ts` fails the build if any ID here is not cited by a test.
 
 Baseline: MCC Laws of Cricket (2017 Code, 3rd edition 2022) and current ICC men's playing
-conditions, with the differences between them as **configurable rules**, never hard-coded.
-Items marked ⚠ are ones where Laws and playing conditions differ or the author isn't certain.
-They're configurable, and their default needs owner sign-off.
+conditions. Where they differ, the difference is a **configurable rule**, not hard-code.
+Items marked ⚠ were owner-approved defaults (Phase 1 plan, Q5); §17 lists known gaps.
 
 ---
 
 ## 1. Vocabulary
 
-| Term                | Meaning in the engine                                                                                     |
-| ------------------- | --------------------------------------------------------------------------------------------------------- |
-| Delivery            | Any ball bowled, legal or not. One `DELIVERY` event.                                                      |
-| Legal ball          | A delivery that's not a wide and not a no-ball. Only legal balls count toward the over.                   |
-| Over / set          | A sequence of deliveries from one end ending with `END_OF_OVER`. "Set" is The Hundred's name for an over. |
-| Striker/non-striker | Batters at the striker's / bowler's end before the delivery.                                              |
-| Runs completed      | Runs physically run by the batters.                                                                       |
-| Boundary            | 4 or 6 allowance. Replaces runs completed unless runs completed are greater (Law 19.8).                   |
-| Extras              | Wides, no-balls, byes, leg byes, penalty runs.                                                            |
-| Bowler's runs       | Runs charged to the bowler: bat runs + all wide runs + no-ball penalties.                                 |
-| Innings             | One side's batting turn. Includes super-over innings (`kind: "SUPER_OVER"`).                              |
-| `MatchRules`        | The full configuration for a match, snapshotted at `MATCH_STARTED`.                                       |
+| Term               | Meaning in the engine                                                                |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| Delivery           | Any ball bowled, legal or not. One `DELIVERY` event.                                 |
+| Legal ball         | Not a wide and not a no-ball. Only legal balls count toward the over.                |
+| Over / set         | Deliveries from one bowler's turn, ended by `END_OF_OVER`. A "set" in The Hundred.   |
+| Runs completed     | Runs physically run (`DELIVERY.runs`).                                               |
+| Boundary allowance | 4 or 6 (configurable) when the ball reaches the boundary.                            |
+| Bowler's runs      | Runs charged to the bowler: bat runs + all wide runs + no-ball penalties (R-EXT-08). |
+| Innings            | One side's batting turn; `kind` is `REGULAR` or `SUPER_OVER`.                        |
+| `MatchRules`       | The full configuration for a match, snapshotted in `MATCH_STARTED`.                  |
 
 ---
 
 ## 2. Match configuration (`MatchRules`)
 
-Snapshotted into `MATCH_STARTED`, so later preset changes never affect a recorded match.
+Flat and fully explicit; snapshotted in `MATCH_STARTED` so preset changes never alter a recorded
+match. Validated at match start (R-LC-01).
 
-| Field                  | Type / default                                                                                    | Notes                                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `playersPerSide`       | int 2–15, default 11                                                                              | Max batters = this; all out = `playersPerSide − 1` wickets (unless LMS). |
-| `ballsPerOver`         | int 1–10, default 6                                                                               | The Hundred: 5. Box cricket often 6 or custom.                           |
-| `oversPerInnings`      | int or `null` (unlimited)                                                                         | Test = `null`. The Hundred: `100 / 5 = 20` sets.                         |
-| `inningsPerSide`       | 1 or 2                                                                                            | 2 = multi-day format.                                                    |
-| `maxDays`              | int or `null`                                                                                     | Multi-day only. Drives the follow-on margin.                             |
-| `bowlerLimit`          | `{ maxOvers?, maxBalls? }`                                                                        | T20: 4 overs. ODI: 10. Hundred: 20 balls. Test: none.                    |
-| `consecutiveOvers`     | `{ maxConsecutive: 1 }` default                                                                   | Hundred: 2 (a bowler may bowl two consecutive sets of 5).                |
-| `wideRuns`             | int, default 1                                                                                    | Penalty for a wide.                                                      |
-| `noBallRuns`           | int, default 1                                                                                    | Penalty for a no-ball. ⚠ Some leagues use 2.                             |
-| `freeHit`              | `"NONE" \| "ALL_NO_BALLS"`, default `ALL_NO_BALLS` limited                                        | Test default `NONE`.                                                     |
-| `noBallByesScoredAs`   | `"BYES" \| "NO_BALLS"`, default `"BYES"`                                                          | ⚠ ICC convention vs Law 21.10 wording. See R-EXT-08.                     |
-| `powerplays`           | array of `{ name, fromOver, toOver, mandatory }`                                                  | Informational for the engine (fielding restrictions aren't scored).      |
-| `lastManStands`        | bool, default false                                                                               | See R-LMS-\*.                                                            |
-| `tieBreaker`           | `"NONE" \| "SUPER_OVER" \| "SUPER_OVER_REPEAT" \| "SUPER_OVER_THEN_BOUNDARY_COUNT" \| "BOWL_OUT"` | Default `SUPER_OVER_REPEAT` for limited overs.                           |
-| `superOver`            | `{ balls: 6, wicketsToEnd: 2 }`                                                                   |                                                                          |
-| `followOn`             | `{ enabled, margin? }`                                                                            | Margin derived from `maxDays` unless given (R-MD-04).                    |
-| `substitutions`        | `{ concussion: bool, impactPlayer: { maxPerTeam } \| null }`                                      |                                                                          |
-| `retiredHurtMayReturn` | bool, default true                                                                                |                                                                          |
-| `targetRevision`       | `{ strategy: "ARR" \| "MPO" \| "DLS_STANDARD" \| "MANUAL", g50?, tableId? }`                      |                                                                          |
-| `boundaryValues`       | `{ four: 4, six: 6 }`                                                                             | Box/indoor cricket variants can override.                                |
+| Field                                            | Meaning / default                                                                                  |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `format`                                         | Display label only.                                                                                |
+| `playersPerSide`                                 | 2–15. All out = `playersPerSide − 1` wickets (`playersPerSide` in Last Man Stands).                |
+| `ballsPerOver`                                   | 1–10. The Hundred: 5.                                                                              |
+| `oversPerInnings`                                | Required for one-innings matches; `null` (unlimited) for multi-day.                                |
+| `inningsPerSide`                                 | 1 or 2.                                                                                            |
+| `maxDays`                                        | Multi-day length; drives the follow-on margin.                                                     |
+| `bowlerMaxOvers`                                 | Overs a bowler may start (T20: 4, ODI: 10).                                                        |
+| `bowlerMaxBalls`                                 | Legal-ball quota (The Hundred: 20).                                                                |
+| `maxConsecutiveOvers`                            | Overs in a row by one bowler. 1; The Hundred 2.                                                    |
+| `oversPerEnd`                                    | Overs bowled from one end before ends change. 1; The Hundred 2 (10-ball ends).                     |
+| `wideRuns`, `noBallRuns`                         | Penalties. 1 / 1; The Hundred: no-ball 2 (confirmed against real match data).                      |
+| `freeHit`                                        | `ALL_NO_BALLS` (limited overs) or `NONE` (Test).                                                   |
+| `noBallByesScoredAs`                             | ⚠ `BYES` (ICC, default) or `NO_BALLS` (literal Law 21.10). See R-EXT-08.                           |
+| `lastManStands`                                  | Last batter bats alone (§10.3).                                                                    |
+| `allowHandledTheBall`                            | Legacy dismissal (pre-2017), off by default.                                                       |
+| `boundaryFour/Six`                               | Boundary allowances (box/indoor variants).                                                         |
+| `tieBreaker`                                     | `NONE`, `SUPER_OVER`, `SUPER_OVER_REPEAT` (default), `SUPER_OVER_THEN_BOUNDARY_COUNT`, `BOWL_OUT`. |
+| `superOverBalls`, `superOverWickets`             | Super-over length (6; Hundred 5) and wickets that end it (2).                                      |
+| `followOnEnabled`, `followOnMargin`              | Follow-on; margin `null` = derived from `maxDays` (R-MD-04).                                       |
+| `concussionReplacements`, `impactPlayersPerTeam` | Substitution rules (§12).                                                                          |
+| `retiredHurtMayReturn`                           | Default true.                                                                                      |
+| `powerplays`                                     | Informational (fielding restrictions are not scored).                                              |
+| `minOversForResult`                              | Overs the side batting second must face for a result (R-TR-08).                                    |
+| `targetRevision`, `dlsG50`                       | `ARR`, `MPO`, `DLS_STANDARD` (needs a resource table), `MANUAL` (§13).                             |
 
-**Presets** (`presets.ts`): `TEST`, `FIRST_CLASS_4DAY`, `ODI`, `T20`, `T10`, `HUNDRED`,
-`LAST_MAN_STANDS`, `BOX_CRICKET`, `CUSTOM`. A preset is just a `MatchRules` value; there's no
-code path specific to a preset.
-
----
-
-## 3. Events (the input language)
-
-Every event has: `id` (UUIDv7), `seq` (per-match, gapless), `type`, `payload`, `createdBy`,
-`deviceId`, `clientTimestamp`, `schemaVersion`. The engine reads only `type`, `payload`, `id`
-and `seq`; the rest is metadata.
-
-| Event                | Key payload                                                                                                                                                                                                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `MATCH_STARTED`      | `rules`, `teams[2]` with `playingXI[]`, `substitutes[]`, `captainId`, `wicketKeeperId`                                                                                                                                                                             |
-| `TOSS`               | `winnerTeamId`, `decision: BAT \| BOWL`                                                                                                                                                                                                                            |
-| `INNINGS_STARTED`    | `battingTeamId`, `strikerId`, `nonStrikerId`, `bowlerId`, `kind: REGULAR \| SUPER_OVER`, `followOn?: bool`                                                                                                                                                         |
-| `DELIVERY`           | `runs` (completed), `boundary?: 4\|6`, `extra?: { kind: WIDE \| NO_BALL \| BYE \| LEG_BYE, … }`, `noBallRunsFrom?: BAT \| BYE \| LEG_BYE`, `dismissal?`, `penaltyRuns?`, `overthrow?`, `overMiscount?`, optional detail (`wagon`, `pitch`, `shot`, `deliveryType`) |
-| `WICKET`             | Non-delivery dismissals only (ADR-0005 §2): `kind`, `batterId`, `fielderIds?`                                                                                                                                                                                      |
-| `BATTER_IN`          | `batterId`, `end: STRIKER \| NON_STRIKER`                                                                                                                                                                                                                          |
-| `BOWLER_CHANGE`      | `bowlerId`, `reason: NEW_OVER \| INJURY \| SUSPENDED \| OTHER`                                                                                                                                                                                                     |
-| `END_OF_OVER`        | `reason?: MISCOUNT`                                                                                                                                                                                                                                                |
-| `PENALTY_RUNS`       | `toTeamId`, `runs` (default 5), `law`, `reason`                                                                                                                                                                                                                    |
-| `RETIREMENT`         | `batterId`, `kind: HURT \| OUT \| NOT_OUT`                                                                                                                                                                                                                         |
-| `RESUMPTION`         | `batterId` (a retired-hurt batter returns)                                                                                                                                                                                                                         |
-| `SUBSTITUTION`       | `kind: CONCUSSION \| IMPACT \| FIELDING`, `outPlayerId`, `inPlayerId`                                                                                                                                                                                              |
-| `SWAP_STRIKE`        | Manual override, with `reason`                                                                                                                                                                                                                                     |
-| `DECLARATION`        | (current innings)                                                                                                                                                                                                                                                  |
-| `FOLLOW_ON`          | `enforced: bool`                                                                                                                                                                                                                                                   |
-| `INTERRUPTION`       | `kind: RAIN \| BAD_LIGHT \| LUNCH \| TEA \| STUMPS \| OTHER`, `at` timestamp                                                                                                                                                                                       |
-| `PLAY_RESUMED`       | `oversPerInnings?` (revised), `bowlerLimitOvers?` (revised)                                                                                                                                                                                                        |
-| `TARGET_REVISED`     | `strategy`, `target`, `overs`, `inputs`, `override: bool`                                                                                                                                                                                                          |
-| `INNINGS_ENDED`      | `reason: ALL_OUT \| OVERS \| TARGET \| DECLARED \| FORFEITED \| CONCEDED \| TIME`                                                                                                                                                                                  |
-| `SUPER_OVER_STARTED` | `round` (1, 2, …)                                                                                                                                                                                                                                                  |
-| `BOWL_OUT_RESULT`    | `winnerTeamId`, `attempts[]` (recorded result; not simulated)                                                                                                                                                                                                      |
-| `MATCH_RESULT`       | Result (see §11), `override: bool`                                                                                                                                                                                                                                 |
-| `UNDO`               | `targetId`                                                                                                                                                                                                                                                         |
-| `CORRECTION`         | `targetId`, `patch`                                                                                                                                                                                                                                                |
+**R-PRE-01** Presets (`TEST`, `FIRST_CLASS_4DAY`, `ODI`, `T20`, `T10`, `HUNDRED`,
+`LAST_MAN_STANDS`, `BOX_CRICKET`, `CUSTOM`) are plain `MatchRules` values and all validate.
+`LAST_MAN_STANDS` and `BOX_CRICKET` are starting points for organisers to adjust.
 
 ---
 
-## 4. Lifecycle & state machine
+## 3. Events
 
-**R-LC-01** The first event must be `MATCH_STARTED`; `TOSS` must precede the first
-`INNINGS_STARTED`.
-**R-LC-02** The engine exposes `state.awaiting`, the set of event types accepted next:
-`TOSS`, `INNINGS_STARTED`, `BATTER_IN`, `BOWLER_CHANGE`, `DELIVERY`, `END_OF_OVER`,
-`MATCH_RESULT`, … Any other event is rejected with `RuleViolation { code, rule, message }`.
-**R-LC-03** A rejected event never changes state (atomicity).
-**R-LC-04** `applyEvent` is pure and deterministic: same state + same event → structurally
-equal state, no clock, no randomness, no I/O.
-**R-LC-05** `replay(events)` ≡ folding `applyEvent` over the effective log (after resolving
-UNDO/CORRECTION).
+Every event: `id` (client UUIDv7), `seq` (per match, strictly increasing), `type`, `payload`.
+Device and audit metadata live outside the engine (`@cricket/schemas` `EventSubmissionSchema`).
+Every payload field is required; optional values are `null`.
+
+| Event                | Payload                                                                                                                                                                                                                                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MATCH_STARTED`      | `rules`, `teams[2]` (`playingXI`, `substitutes`, `captainId`, `wicketKeeperId`)                                                                                                                                                                                                                       |
+| `TOSS`               | `winnerTeamId`, `decision: BAT \| BOWL`                                                                                                                                                                                                                                                               |
+| `INNINGS_STARTED`    | `battingTeamId`, `strikerId`, `nonStrikerId`, `bowlerId` (kind/round derived)                                                                                                                                                                                                                         |
+| `DELIVERY`           | `runs`, `boundary: FOUR\|SIX\|null`, `overthrow`, `extra` (`WIDE`, `NO_BALL{runsFrom: BAT\|BYE\|LEG_BYE}`, `BYE`, `LEG_BYE` or null), `dismissal` (`kind`, `batterId`, `fielderIds`, `end`, `directHit`) or null, `penaltyRuns`, `overMiscount`, `detail` (wagon, pitch, shot, delivery type) or null |
+| `WICKET`             | Dismissals without a delivery: `TIMED_OUT`, `RUN_OUT`, `OBSTRUCTING_THE_FIELD`, `HANDLED_THE_BALL`                                                                                                                                                                                                    |
+| `BATTER_IN`          | `batterId` (fills the vacant end; also how a retired-hurt batter resumes)                                                                                                                                                                                                                             |
+| `BOWLER_CHANGE`      | `bowlerId`, `reason: NEW_OVER \| INJURY \| SUSPENDED \| OTHER`                                                                                                                                                                                                                                        |
+| `END_OF_OVER`        | `reason: NORMAL \| MISCOUNT`                                                                                                                                                                                                                                                                          |
+| `PENALTY_RUNS`       | `toTeamId`, `runs`, `reason`                                                                                                                                                                                                                                                                          |
+| `RETIREMENT`         | `batterId`, `kind: HURT \| OUT`                                                                                                                                                                                                                                                                       |
+| `SUBSTITUTION`       | `kind: CONCUSSION \| IMPACT \| FIELDING`, `teamId`, `outPlayerId`, `inPlayerId`                                                                                                                                                                                                                       |
+| `SWAP_STRIKE`        | `reason` (manual override)                                                                                                                                                                                                                                                                            |
+| `DECLARATION`        | `teamId`                                                                                                                                                                                                                                                                                              |
+| `FOLLOW_ON`          | `enforced`                                                                                                                                                                                                                                                                                            |
+| `INTERRUPTION`       | `kind: RAIN \| BAD_LIGHT \| LUNCH \| TEA \| STUMPS \| OTHER`                                                                                                                                                                                                                                          |
+| `PLAY_RESUMED`       | `revisedOvers`, `revisedBowlerMaxOvers` (both nullable)                                                                                                                                                                                                                                               |
+| `TARGET_REVISED`     | `target`, `overs`, `override`                                                                                                                                                                                                                                                                         |
+| `INNINGS_ENDED`      | `reason: ALL_OUT` (no batter available) \| `FORFEITED` (before a multi-day innings)                                                                                                                                                                                                                   |
+| `SUPER_OVER_STARTED` | `round`                                                                                                                                                                                                                                                                                               |
+| `BOWL_OUT_RESULT`    | `winnerTeamId` (recorded, not simulated)                                                                                                                                                                                                                                                              |
+| `MATCH_RESULT`       | `result`, `override`                                                                                                                                                                                                                                                                                  |
+| `UNDO`               | `targetId`                                                                                                                                                                                                                                                                                            |
+| `CORRECTION`         | `targetId`, `patch`                                                                                                                                                                                                                                                                                   |
 
 ---
 
-## 5. Deliveries, runs & boundaries
+## 4. Lifecycle
 
-**R-RUN-01** Runs completed (0–N, any non-negative integer; 5 and 7 are valid) are credited to
-the striker and the bowler, and count as balls faced and legal balls.
-**R-RUN-02** A boundary scores its allowance (4/6, configurable) instead of runs completed,
-unless runs completed _before_ the boundary are greater (Law 19.8).
-**R-RUN-03** Overthrow to boundary: runs completed + boundary allowance + the run in progress
-if the batters had crossed at the throw (Law 19.8). The scorer enters the total; the engine
-records `overthrow: true` for stats and commentary. (2019 World Cup final: 2 + 4 = 6.)
-**R-RUN-04** Short runs: the scorer records only the runs that count. Deliberate short running
-→ separate `PENALTY_RUNS` to the fielding side.
-**R-RUN-05** Team total = Σ batter runs + Σ extras (all kinds incl. penalty). Property-tested.
-**R-RUN-06** Dot ball = legal ball with 0 runs to the batter and 0 extras.
+**R-LC-01** The first event is `MATCH_STARTED` (rules and team sheets validated); `TOSS` comes
+before the first innings.
+**R-LC-02** `awaiting(state)` lists the event types that may be accepted next (advisory for UIs;
+`applyEvent` is the authority). Nothing is accepted after the match is complete. Unknown event
+types are programming errors (plain `Error`), not rule violations.
+**R-LC-03** A rejected event throws `RuleViolation { code, rule, message, seq }` and never changes
+state. Hostile input is property-tested to fail only this way.
+**R-LC-04** `applyEvent` is pure and deterministic: no clock, randomness or I/O, and the input
+state is never mutated.
+**R-LC-05** `replay(log)` ≡ folding `applyEvent` over the effective log; `replayFrom(snapshot,
+tail)` ≡ `replay(log)`.
+**R-LC-06** Event `seq` numbers must strictly increase.
+
+## 5. Runs and boundaries
+
+**R-RUN-01** Runs completed (any whole number 0–20) are credited to the striker, the bowler and
+the team, and a legal ball is counted.
+**R-RUN-02** A boundary scores its allowance, unless the runs completed before it are greater
+(Law 19.8). A six can have no runs completed and no overthrow.
+**R-RUN-03** An overthrow to the boundary scores runs completed (including the run in progress if
+the batters had crossed) plus the allowance. It is not a "four" to the batter.
+**R-RUN-04** Short runs: only the runs that count are recorded; deliberate short running is a
+separate `PENALTY_RUNS`.
+**R-RUN-05** Team total = Σ batter runs + Σ extras (property-tested).
+**R-RUN-06** A batter's dot is a legal ball faced with nothing off the bat; a bowler's dot is a
+legal ball with no runs charged (so a bye is a dot for the bowler).
 
 ## 6. Extras
 
-**R-EXT-01 Wide.** Adds `wideRuns` + runs completed (or the boundary allowance), **all scored as
-wides** and charged to the bowler. Not a legal ball; not a ball faced.
-**R-EXT-02** Wide that runs to the boundary = `wideRuns` + 4 (= 5 by default).
-**R-EXT-03 No-ball.** Adds `noBallRuns` penalty, charged to the bowler. It isn't a legal ball,
-but it **is** a ball faced by the striker.
+**R-EXT-01 Wide.** `wideRuns` plus runs completed, all scored as wides and charged to the bowler.
+Not a legal ball, not a ball faced.
+**R-EXT-02** A wide to the boundary scores `wideRuns + 4`. It is not a boundary off the bat.
+**R-EXT-03 No-ball.** `noBallRuns` penalty charged to the bowler. Not a legal ball, but a ball
+faced. With `freeHit = ALL_NO_BALLS` the next delivery is a free hit; a wide or no-ball on a free
+hit keeps it.
 **R-EXT-04** Bat runs off a no-ball are credited to the striker and charged to the bowler.
-**R-EXT-05 Byes / leg byes.** Count to the total and extras only, not to the batter or the
-bowler. A bye is a legal ball and a ball faced.
-**R-EXT-06** Leg byes can't be scored without an attempt to hit or avoid the ball (Law 23.2).
-The engine can't know this; it's the umpire's call and isn't validated.
-**R-EXT-07** Wide + byes is impossible; runs run off a wide are wides (R-EXT-01).
-**R-EXT-08 ⚠** Runs run off a no-ball that didn't hit the bat: with
-`noBallByesScoredAs = "BYES"` (ICC convention, default) they're byes/leg byes and _not_
-charged to the bowler. With `"NO_BALLS"` (literal Law 21.10 reading) they're no-ball extras.
-The no-ball penalty itself is always charged to the bowler.
-**R-EXT-09 Penalty runs** (default 5, Law 41) go to the batting side's current innings, or to the
-fielding side's **most recent completed innings**. If that side hasn't batted yet, they go to
-its next innings (Law 41.17). They're never charged to the bowler or a batter.
-**R-EXT-10** Penalty runs on a delivery (e.g. ball hits the fielding side's helmet on the
-ground) are in addition to runs completed, and the delivery still counts (or not) as normal.
+**R-EXT-05 Byes / leg byes** need at least one run, count to the total and extras only, and are
+legal balls faced. Byes can be a four, never a six.
+**R-EXT-06** Leg-bye legitimacy (Law 23.2) is the umpire's call; the engine records it as given.
+**R-EXT-07** Runs run off a wide are wides, never byes.
+**R-EXT-08 ⚠** Runs run off a no-ball that missed the bat: `BYES` → byes/leg byes, not charged to
+the bowler; `NO_BALLS` → no-ball extras, charged to the bowler. The penalty is always charged.
+**R-EXT-09** Penalty runs (`PENALTY_RUNS`, default 5) go to the batting side's current innings.
+Awarded to the fielding side, they go to its most recent completed innings, or to its next innings
+if it has not batted (Law 41.17). Dependent targets and the provisional result are recomputed.
+Runs awarded while a crease is vacant join the next partnership.
+**R-EXT-10** `DELIVERY.penaltyRuns` adds penalty runs on a delivery, in addition to its runs.
 
-## 7. Overs & bowlers
+## 7. Overs and bowlers
 
-**R-OV-01** An over is _due_ after `ballsPerOver` legal balls. Further `DELIVERY` events are
-rejected unless flagged `overMiscount: true` (Law 17.5). `END_OF_OVER` is then required.
-**R-OV-02** `END_OF_OVER` with fewer legal balls requires `reason: "MISCOUNT"` or an innings-ending
-condition.
-**R-OV-03** At `END_OF_OVER` the batters change ends (strike swaps), unless the innings has ended.
-**R-OV-04 Maiden.** A completed over with zero runs charged to the bowler (byes/leg byes don't
-spoil it; wides and no-balls do). Overs cut short or completed by another bowler can't be
-maidens.
-**R-OV-05** A new over needs `BOWLER_CHANGE`. The bowler must be on the fielding side, not
-the bowler of the previous over (with `maxConsecutive: 1`), and must not exceed
-`bowlerLimit`.
-**R-OV-06 Mid-over change** (injury or suspension, Law 17.8): another bowler completes the
-over. That bowler must not have bowled the previous over and can't bowl the next one. Legal
-balls are credited to whoever bowled each delivery. A bowler suspended for the innings can't
-bowl again in it.
-**R-OV-07** Overs notation: `O.B` where B = legal balls in the current over (`12.3`). For the
-bowler's figures a partial over is shown the same way. Arithmetic always uses legal balls,
-never decimals.
-**R-OV-08** Hundred mode: `ballsPerOver = 5`, `consecutiveOvers.maxConsecutive = 2`,
-`bowlerLimit.maxBalls = 20`, and overs are displayed as balls (`"67 balls"`).
+**R-OV-01** An over is due after `ballsPerOver` legal balls; further deliveries are rejected
+unless flagged `overMiscount` (the umpire allowed an extra ball, Law 17.5).
+**R-OV-02** `END_OF_OVER` before the over is due must say `MISCOUNT`; the short over counts as
+complete.
+**R-OV-03** At `END_OF_OVER` the batters change ends when the bowling end changes (every
+`oversPerEnd` overs).
+**R-OV-04 Maiden**: a full over by one bowler with no runs charged to the bowler (byes and leg byes
+do not spoil it; wides and no-balls do).
+**R-OV-05** A new over needs `BOWLER_CHANGE { NEW_OVER }`. The bowler must be in the fielding XI,
+not suspended, within quota (`bowlerMaxOvers` counts overs started; `bowlerMaxBalls` counts legal
+balls), and not over `maxConsecutiveOvers`. Before the first ball the selection may be changed
+(reason ≠ `NEW_OVER`) without counting an over.
+**R-OV-06 Mid-over change** (injury, suspension): someone who did not bowl the previous over (or
+in this over) completes it, within quota. Nobody who took part in a shared over may bowl the next
+one. A `SUSPENDED` bowler may not bowl again in the innings. Balls are credited to whoever bowled
+them.
+**R-OV-07** Overs read `O.B` (completed overs, legal balls in the current over), for teams and
+bowlers.
+**R-OV-08** The Hundred: 5-ball sets, two consecutive sets allowed from one end, 20-ball quotas,
+progress shown in balls ("67 balls").
 
 ## 8. Dismissals
 
-| Kind                  | Bowler credited | On wide? | On no-ball / free hit? | Who can be out  | Notes                                       |
-| --------------------- | --------------- | -------- | ---------------------- | --------------- | ------------------------------------------- |
-| BOWLED                | yes             | no       | no                     | striker         |                                             |
-| CAUGHT                | yes             | no       | no                     | striker         | Includes c&b, keeper, substitute fielder    |
-| LBW                   | yes             | no       | no                     | striker         |                                             |
-| RUN_OUT               | no              | yes      | yes                    | either          | Fielders involved, direct hit, which end    |
-| STUMPED               | yes             | yes      | no                     | striker         |                                             |
-| HIT_WICKET            | yes             | yes      | no                     | striker         |                                             |
-| OBSTRUCTING_THE_FIELD | no              | yes      | yes                    | either          |                                             |
-| HIT_BALL_TWICE        | no              | no       | yes                    | striker         |                                             |
-| HANDLED_THE_BALL      | no              | yes      | yes                    | either          | Legacy only (pre-2017); allowed if enabled  |
-| TIMED_OUT             | no              | —        | —                      | incoming batter | `WICKET` event, no delivery                 |
-| RETIRED_OUT           | no              | —        | —                      | either          | `RETIREMENT { kind: OUT }`; counts a wicket |
-| RETIRED_HURT          | —               | —        | —                      | either          | Not a wicket; may resume                    |
+| Kind                  | Credits bowler | Legal | Wide | No-ball / free hit | Byes | Who      | Runs allowed |
+| --------------------- | -------------- | ----- | ---- | ------------------ | ---- | -------- | ------------ |
+| BOWLED                | yes            | yes   |      |                    |      | striker  | no           |
+| CAUGHT                | yes            | yes   |      |                    |      | striker  | no           |
+| LBW                   | yes            | yes   |      |                    |      | striker  | no           |
+| STUMPED               | yes            | yes   | yes  |                    |      | striker  | no           |
+| HIT_WICKET            | yes            | yes   | yes  |                    |      | striker  | no           |
+| HIT_BALL_TWICE        |                | yes   |      | yes                |      | striker  | no           |
+| RUN_OUT               |                | yes   | yes  | yes                | yes  | either   | yes          |
+| OBSTRUCTING_THE_FIELD |                | yes   | yes  | yes                | yes  | either   | yes          |
+| HANDLED_THE_BALL      |                | yes   | yes  | yes                | yes  | either   | yes (legacy) |
+| TIMED_OUT             |                | —     | —    | —                  | —    | incoming | `WICKET`     |
+| RETIRED_OUT           |                | —     | —    | —                  | —    | either   | `RETIREMENT` |
 
-**R-DIS-01** The engine rejects a dismissal kind not allowed for the delivery type or free-hit
-state (table above).
-**R-DIS-02** Bowler wickets increase only for credited kinds.
-**R-DIS-03** `CAUGHT` requires a fielder id from the fielding side (substitutes included). If
-the fielder is the bowler, it renders as "c & b".
-**R-DIS-04** `STUMPED` requires the designated wicket-keeper (keeper changes are tracked via
-`SUBSTITUTION`/`MATCH_STARTED` metadata).
-**R-DIS-05 Run out.** Payload: `batterId` (who is out), `runsCompleted` (count), `end`
-(STRIKER/NON_STRIKER: which wicket was broken), `fielderIds[]`, `directHit`. Runs completed
-before the run out count. On a no-ball the penalty still counts. The not-out batter stays at
-the end they reached, and the new batter goes to the vacant end.
-**R-DIS-06 Caught, new batter on strike.** After a catch, the incoming batter takes strike,
-whether or not the batters crossed (Law 18.11, 2022), unless the catch was the last ball of
-the over.
-**R-DIS-07** Other striker dismissals (bowled, LBW, stumped, hit wicket): the incoming batter
-takes strike, unless it was the last ball of the over.
-**R-DIS-08** Run out of the non-striker before the delivery (Law 38.3) is a `WICKET` event. It's
-not a ball, the bowler isn't credited, and the over count doesn't change.
-**R-DIS-09** After any wicket the engine requires `BATTER_IN` (unless the innings has ended).
-The incoming batter must be from the batting XI (or an eligible substitute, §12), not
-already dismissed, and not currently batting.
-**R-DIS-10 Timed out**: the incoming batter is out without facing; recorded via `WICKET`
-after (instead of) `BATTER_IN`.
-**R-DIS-11** Fall of wicket records `{ wicketNo, score, overs (legal balls), batterId, partnership }`.
+**R-DIS-01** A dismissal not allowed for the delivery type or free hit is rejected; striker-only
+kinds must name the striker; the ball is dead after non-run-out dismissals, so no runs can be
+recorded with them, and a run out cannot coincide with a boundary.
+**R-DIS-02** Only the kinds marked "credits bowler" count to the bowler.
+**R-DIS-03** A catch names exactly one fielder from the fielding side (substitutes allowed).
+Scorecards show "c & b", "†" for the keeper and "sub (Name)".
+**R-DIS-04** Only the wicket-keeper stumps; an empty fielder list means the keeper.
+**R-DIS-05 Run out**: runs completed count (and a no-ball penalty). `end` names the wicket that
+was broken (`null` = the dismissed batter's end); the survivor stays at the other end and the new
+batter goes to `end`.
+**R-DIS-06** After a catch the new batter takes strike (Law 18.11, 2022), except on the last ball
+of the over (the end-of-over change then applies). Matches played under the older crossing rule
+record the difference with `SWAP_STRIKE`.
+**R-DIS-07** Other striker-only dismissals vacate the striker's end; the new batter takes strike.
+**R-DIS-08** `WICKET` records a run out or obstruction without a delivery (e.g. the non-striker
+backing up): not a ball, no bowler credit.
+**R-DIS-09** After a wicket, `BATTER_IN` is required before the next ball. The batter must be in
+the active XI, not already out or batting, and within the distinct-batter limit. Two vacancies
+need two batters before a partnership starts.
+**R-DIS-10** `WICKET { TIMED_OUT }` dismisses the incoming batter without a ball faced; dismissals
+between overs record no bowler at the time.
+**R-DIS-11** Fall of wicket records wicket number, score, legal balls, `O.B` and batter.
 
 ## 9. Strike rotation
 
-**R-STR-01** Odd runs completed swap strike; even don't. Boundary allowances don't swap
-strike unless runs completed before the boundary were odd and exceeded the allowance
-(R-RUN-02).
-**R-STR-02** Wides: runs _completed_ (excluding the penalty) decide rotation. A wide to the
-boundary doesn't swap.
-**R-STR-03** No-balls: runs completed (bat or byes) decide rotation; the penalty doesn't.
-**R-STR-04** Byes / leg byes rotate by runs completed.
-**R-STR-05** `END_OF_OVER` swaps (R-OV-03). An odd run off the last ball followed by the end
-of over therefore leaves the original striker on strike.
-**R-STR-06** `SWAP_STRIKE` is a manual override and records a reason for the audit trail.
-**R-STR-07** Dismissal strike handling per R-DIS-05..07.
+**R-STR-01** Odd runs completed swap strike. A boundary does not, unless more (odd) runs were
+completed. For an overthrow boundary, rotation follows runs completed.
+**R-STR-02** Wides rotate on runs completed, not the penalty.
+**R-STR-03** No-balls rotate on runs completed (bat or byes).
+**R-STR-04** Byes and leg byes rotate on runs completed.
+**R-STR-05** `END_OF_OVER` changes ends, so a single off the last ball keeps the original
+striker on strike.
+**R-STR-06** `SWAP_STRIKE` is a manual override (both batters must be in).
+**R-STR-07** After a dismissal, strike follows R-DIS-05..07 rather than the runs.
 
-## 10. Innings & match structure
+## 10. Innings and match structure
 
-**R-INN-01** Playing XI: exactly `playersPerSide` players per side; substitutes listed
-separately. Captain and keeper must be in the XI.
-**R-INN-02** The innings ends automatically (the engine sets `awaiting: INNINGS_ENDED`
-proposal with reason) when:
+**R-INN-01** Exactly `playersPerSide` in each XI, no player listed twice, captain and keeper in
+the XI, two different teams; openers are two different eligible players and the bowler is in the
+fielding XI.
+**R-INN-02** The innings closes automatically when the target is reached, all wickets are down, or
+the overs are used up (a final over needs no `END_OF_OVER`). `INNINGS_ENDED { ALL_OUT }` closes it
+when a batter is needed but none can come in (e.g. absent hurt).
+**R-INN-03** `DECLARATION` by the batting side, multi-day only.
+**R-INN-04** Completed overs never exceed the allocation (property-tested).
+**R-INN-05** Wickets never exceed `playersPerSide − 1` (`playersPerSide` in LMS; property-tested).
+**R-INN-06** Batting order is free; order of appearance is recorded.
+**R-INN-07** The side batting last chases opponent aggregate − own aggregate + 1 (limited overs:
+first-innings total + 1), unless revised (§13).
 
-- all out: wickets = `playersPerSide − 1`, or no eligible batter remains (retired hurt who
-  can't resume, absent hurt);
-- overs complete (`oversPerInnings` × `ballsPerOver` legal balls, after any revision);
-- target reached (chasing side's total ≥ target);
-- super over: `wicketsToEnd` wickets or `superOver.balls` legal balls.
+### 10.1 Multi-day
 
-**R-INN-03** `INNINGS_ENDED` with `DECLARED` is valid only in multi-day, and only for the
-batting side. With `FORFEITED` or `CONCEDED` it's valid at innings start or anytime
-respectively.
-**R-INN-04** Legal balls in an innings never exceed `oversPerInnings × ballsPerOver`
-(property-tested), except for recorded miscounts.
-**R-INN-05** Wickets never exceed `playersPerSide − 1` (or `playersPerSide` in LMS;
-property-tested).
-**R-INN-06** Batting order is free: any eligible player may come in (R-DIS-09). The order of
-appearance is recorded.
-**R-INN-07** Target for the side batting last = opponent aggregate − own previous
-aggregate + 1 (limited overs: opponent total + 1), or as revised (§13).
+**R-MD-01** Innings alternate A, B, A, B; after an enforced follow-on A, B, B, A. The side batting
+last chases the aggregate.
+**R-MD-02** An innings may be forfeited before it starts (`INNINGS_ENDED { FORFEITED }`, Law 15).
+**R-MD-03** `MATCH_RESULT { DRAW }` when time runs out.
+**R-MD-04 Follow-on**: available when the side batting first leads by at least 200 (5+ days), 150
+(3–4), 100 (2) or 75 (1) — or `followOnMargin`. `FOLLOW_ON` must decide before the third innings.
+**R-MD-05** A side that has batted twice and is still behind loses by an innings and N runs; level
+after three innings, the last side needs 1.
+**R-MD-06** Days advance when play resumes after `INTERRUPTION { STUMPS }`; sessions are
+informational.
 
-### Multi-day
+### 10.2 Super overs
 
-**R-MD-01** `inningsPerSide = 2`: the order is A, B, A, B, unless the follow-on is enforced
-(A, B, B, A).
-**R-MD-02** Declarations (R-INN-03); forfeit of an innings (Law 15) is allowed.
-**R-MD-03** Draw when time expires (`MATCH_RESULT { kind: DRAW }`) with the result undecided.
-**R-MD-04 Follow-on** (Law 14): available when the side batting second in a two-innings match
-trails by at least 200 runs (5+ day match), 150 (3–4 days), 100 (2 days) or 75 (1 day). The
-margin comes from the days remaining when play actually began (Law 14.1.2), or `followOn.margin`
-if configured. The engine sets `followOnAvailable`; `FOLLOW_ON { enforced }` decides.
-**R-MD-05** Win by an innings: if the side batting first in a two-innings match isn't required
-to bat again, the result is "won by an innings and N runs".
-**R-MD-06** Days and sessions are tracked from `INTERRUPTION`/`PLAY_RESUMED` (STUMPS, LUNCH,
-TEA) for display only; the engine doesn't enforce session lengths.
+**R-SO-01** Round 1: the side that batted second in the match bats first; later rounds: the side
+that batted second in the previous round.
+**R-SO-02** Batters dismissed in one round cannot bat in the next.
+**R-SO-03** A bowler from the previous round cannot bowl in the next.
+**R-SO-04** A super-over innings is one over of `superOverBalls` legal balls and ends at
+`superOverWickets` wickets; the chase target is the first super-over score + 1.
 
-### Last Man Stands
+### 10.3 Last Man Stands
 
-**R-LMS-01** With `lastManStands`, the innings continues when one batter remains: there's no
-non-striker, that batter keeps strike, and odd runs don't rotate.
-**R-LMS-02** All out = `playersPerSide` wickets.
-**R-LMS-03** Run outs can happen at either end. The scorer must give the end.
+**R-LMS-01** When one batter is left (also if they come back in), they bat alone, keep strike, and
+odd runs and ends don't rotate.
+**R-LMS-02** All out = every player out.
+**R-LMS-03** The last batter can be run out at either end.
 
 ## 11. Results
 
-**R-RES-01** Chasing side passes target → "won by W wickets", where W = `playersPerSide − 1 −
-wickets lost` (LMS: `playersPerSide − wickets`). Limited overs: plus "(B balls remaining)".
-**R-RES-02** Side batting last falls short → "won by R runs", where R = target − 1 − chasing total
-(with a revised target, the revised one; label "(DLS method)" when that strategy applied).
-**R-RES-03** Scores level at the end of the match → **tie**, then tie-breaker per config:
-`SUPER_OVER` (one; if it's tied, the match is tied), `SUPER_OVER_REPEAT` (repeat until there's
-a result), `SUPER_OVER_THEN_BOUNDARY_COUNT` (legacy 2019 rule: tied super over → more
-boundaries in match + super over), `BOWL_OUT` (result recorded), `NONE` (tie stands).
-**R-RES-04** Multi-day: tie only when the side batting last is all out with scores level
-(Law 16.4); otherwise a draw at time.
-**R-RES-05** Non-playing results set by `MATCH_RESULT`: `NO_RESULT`, `ABANDONED`, `FORFEIT`
-(walkover; winner given), `AWARDED` (by officials; winner given), `CONCEDED`.
-**R-RES-06** Every `MATCH_RESULT` is checked against the computed result. A mismatch is rejected
-unless `override: true` (officials' decision, audited).
+**R-RES-01** Chasing side reaches the target → won by `maxWickets − wickets` wickets, with balls
+remaining in limited-overs cricket.
+**R-RES-02** Chasing side falls short → won by `target − 1 − score` runs; "(ARR/MPO/DLS method)"
+when the target was revised.
+**R-RES-03** Scores level → per `tieBreaker`: tie stands; super over (decides either way; tied
+again → tie, or another round with `SUPER_OVER_REPEAT`); boundary count (fours and sixes **off the
+bat** across the match and super overs — the 2019 World Cup final was 26–17; equal → tie); or a
+recorded bowl-out.
+**R-RES-04** Multi-day: tie only when the side batting last is out with scores level; short →
+won by runs.
+**R-RES-05** Results that cannot be computed are declared: `NO_RESULT`, `ABANDONED`, `DRAW`
+(multi-day), or a win by `FORFEIT` / `AWARDED` / `CONCEDED`. A pending innings closes as
+`MATCH_ENDED`.
+**R-RES-06** `MATCH_RESULT` must equal the computed result (or the R-TR-08 result) unless
+`override: true` (officials' decision, audited by the event itself).
 
-## 12. Substitutions & retirements
+## 12. Substitutions and retirements
 
-**R-SUB-01 Fielding substitute**: may field (and take catches) but can't bat, bowl or keep
-(keeping is allowed under current ICC conditions with umpire consent; configurable).
-**R-SUB-02 Concussion replacement** (when enabled): like-for-like replacement. The replaced
-player takes no further part. The replacement takes over the replaced player's eligibility:
-if the replaced player had been dismissed, the replacement can't bat in that innings; if they
-were not out, the replacement may bat. The replacement may bowl any remaining overs, but the
-over quota counts the replaced player's overs already bowled.
-**R-SUB-03 Impact player** (when enabled, `maxPerTeam`): replaces any XI player. The replaced
-player takes no further part. ⚠ Batting is capped at `playersPerSide` distinct batters per
-innings (IPL rule); bowling quota per player is unchanged.
-**R-SUB-04 Retired hurt**: not out, not a wicket. The batter may resume (`RESUMPTION`) when a
-wicket falls or another batter retires. If they can't, they show as "retired not out" and
-count as unavailable for all-out purposes.
-**R-SUB-05 Retired out**: counts as a wicket, not credited to the bowler.
+**R-SUB-01** Substitutes listed on the team sheet may field (and catch) without joining the XI
+(`SUBSTITUTION { FIELDING }` is informational). Only XI players may be replaced, only by listed
+substitutes.
+**R-SUB-02 Concussion replacement** (when enabled): the replaced player takes no further part;
+the replacement inherits their batting state for the innings (cannot bat if the replaced player
+was out), their bowling quota (overs already bowled count), and the gloves. A batter at the
+crease must retire first; the current bowler must be changed first.
+**R-SUB-03 Impact player** (up to `impactPlayersPerTeam`): replaces any XI player, who takes no
+further part. No more than `playersPerSide` distinct batters per innings.
+**R-SUB-04 Retired hurt**: not a wicket, ends the partnership; the batter may resume with
+`BATTER_IN` (if `retiredHurtMayReturn`). Unbeaten at the end: "retired not out".
+**R-SUB-05 Retired out**: a wicket, not credited to the bowler.
 
-## 13. Interruptions & target revision
+## 13. Interruptions and target revision
 
-**R-TR-01** `INTERRUPTION` stops play. `PLAY_RESUMED` may reduce `oversPerInnings` for one or
-both innings and reduce bowler quotas proportionally. The quota reduction is
-`ceil(newOvers / 5)` for a 50-over match (⚠ playing-condition dependent; the value comes from
-config).
-**R-TR-02** `TargetRevisionStrategy` interface:
-`revise(ctx: { firstInnings, secondInnings, interruptions, rules }) → { target, overs, par(ballsBowled, wicketsLost) }`.
-**R-TR-03 ARR** (average run rate): target = floor(team1 runs × revisedOvers2 / overs1) + 1.
-**R-TR-04 MPO** (most productive overs): target = Σ of team 1's highest-scoring N overs + 1,
-where N = revised overs for team 2.
-**R-TR-05 DLS Standard-style**: resources from the configured table (ADR-0013).
-`R1`, `R2` = resources available to team 1 and 2. If `R2 < R1`: `T = floor(S × R2/R1) + 1`.
-If `R2 > R1`: `T = floor(S + G × (R2 − R1)/100) + 1`, where `G` = `rules.targetRevision.g50`.
-The table and G are inputs; the engine never embeds an official table.
-**R-TR-06** Par score at any point is exposed for display: the score at which the chasing side
-would win if no more play were possible.
-**R-TR-07 Manual override**: `TARGET_REVISED { override: true }` is accepted as given.
-**R-TR-08** A match is a no result if the minimum overs for a result (config, e.g. 5 in T20,
-20 in ODI) weren't possible for the side batting second.
+**R-TR-01** During an `INTERRUPTION` no balls, wickets or innings starts are accepted.
+`PLAY_RESUMED` may revise the overs of the current innings (or the next one, between innings),
+recorded as a reduction for DLS, and may revise the bowler quota explicitly. Revised overs below
+what has been bowled are rejected; reaching the new limit closes the innings.
+**R-TR-02** `TARGET_REVISED` applies only to the chase in a one-innings match (before or during
+it), with whole positive values and overs not below those used. Unless `override`, it must equal
+the configured strategy's target.
+**R-TR-03 ARR**: `floor(team1 runs × team2 overs / team1 overs) + 1`, where team 1's overs are
+its full allocation if it was all out.
+**R-TR-04 MPO**: sum of team 1's highest-scoring `team2 overs` overs + 1.
+**R-TR-05 DLS Standard-style**: resources `R1`, `R2` from an externally supplied table
+(ADR-0013; rows = overs remaining, columns = wickets lost, linear interpolation), net of
+reductions. If `R2 < R1`: `floor(S × R2 / R1) + 1`; else `floor(S + G50 × (R2 − R1) / 100) + 1`.
+Tables are validated (bounds, monotonic). The repository ships only a synthetic test table.
+**R-TR-06** `parScore(state)` gives the chasing side's par now, for every strategy that can
+compute one (not `MANUAL`, not DLS without a table).
+**R-TR-07** `MANUAL` targets must be overrides.
+**R-TR-08** If play ends during the chase: before `minOversForResult` → no result; after → win,
+loss or tie against par (`resultIfNoMorePlay`).
 
-## 14. Undo & corrections
+## 14. Undo and corrections
 
-**R-UNDO-01** `UNDO { targetId }` must target the latest _effective_ event; otherwise it's
-rejected.
+**R-UNDO-01** `UNDO { targetId }` must target the latest effective event.
 **R-UNDO-02** `replay(log + UNDO(e))` ≡ `replay(log without e)` (property-tested).
-**R-UNDO-03** Redo = `UNDO` of the `UNDO`; `replay(log + UNDO(e) + UNDO(UNDO(e)))` ≡
-`replay(log)` (property-tested).
-**R-UNDO-04** `MATCH_STARTED` can't be undone; abandon the match instead.
-**R-COR-01** `CORRECTION { targetId, patch }`: the patch is validated per event type (e.g.
-DELIVERY: `dismissal.fielderIds`, `runs`, `extra`, detail fields). The corrected log must
-replay without violations; otherwise the correction is rejected with the first failing `seq`.
-**R-COR-02** Corrections of corrections apply in `seq` order (last writer wins per field).
+**R-UNDO-03** Undoing an `UNDO` is a redo; any new event clears the redo stack (property-tested).
+**R-UNDO-04** `MATCH_STARTED` cannot be undone.
+**R-COR-01** `CORRECTION { targetId, patch }` may only change listed fields of an effective event
+(e.g. a delivery's runs, extras, dismissal, detail). The match is re-replayed; if a later event
+becomes invalid, the correction is rejected with that event's `seq`.
+**R-COR-02** Later corrections win per field; corrections can be undone like any event.
 
-## 15. Derived metrics (exposed by the engine)
+## 15. Derived metrics
 
-| Metric                 | Formula / rule                                                                                                                                                                                                                    |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Strike rate            | 100 × runs / balls faced (balls faced includes no-balls, excludes wides)                                                                                                                                                          |
-| Economy                | bowler runs / (legal balls / ballsPerOver)                                                                                                                                                                                        |
-| Bowling average        | bowler runs / credited wickets (career, Phase 5)                                                                                                                                                                                  |
-| Batting average        | runs / dismissals (not outs and retired hurt excluded; career, Phase 5)                                                                                                                                                           |
-| Run rate               | team runs / (legal balls / ballsPerOver)                                                                                                                                                                                          |
-| Required run rate      | runs needed / (balls remaining / ballsPerOver)                                                                                                                                                                                    |
-| Projected score        | current runs + current RR × overs remaining; also at RR = current ±1, ±2 and fixed 6, 8, 10                                                                                                                                       |
-| Partnerships           | per wicket: runs (incl. extras), balls (legal), each batter's contribution                                                                                                                                                        |
-| Dot ball %, boundary % | per batter and per bowler                                                                                                                                                                                                         |
-| Balls per boundary     | balls faced / (4s + 6s)                                                                                                                                                                                                           |
-| Maidens                | R-OV-04                                                                                                                                                                                                                           |
-| Bowler wides / NBs     | counts of deliveries (not runs)                                                                                                                                                                                                   |
-| Net run rate           | (Σ runs scored / Σ overs faced) − (Σ runs conceded / Σ overs bowled). A side **all out counts as having faced its full quota of overs**. With revised overs, the revised quota is used. No-result/abandoned matches are excluded. |
+**R-MET-01** Strike rate (100 × runs / balls faced), economy (runs / overs), averages, run rate —
+`null` when undefined.
+**R-MET-02** Required run rate and projected scores (current rate, ±1/±2, and fixed 6/8/10 RPO).
+**R-MET-03** Dot-ball %, boundary %, balls per boundary (batters), dot-ball % (bowlers).
+**R-MET-04** Net run rate: (Σ runs for / Σ overs faced) − (Σ runs against / Σ overs bowled); a side
+all out counts its full (revised) allocation; no-result, abandoned, forfeited and multi-day
+matches are excluded.
+**R-MET-05** Plain-text scorecard (batting, dismissal text, extras, FoW, bowling, result) and
+result wording.
+**R-MET-06** Ball labels for the over strip (`•`, `4`, `2wd`, `3nb`, `1lb`, `W`, `+5p`) and
+one-line auto-commentary per delivery.
 
-NRR is a pure helper over completed match summaries. It ships in Phase 1 because it's an
-engine-level formula; the points table that uses it is Phase 6.
+## 16. Invariants (property tests, `test/property`)
 
-## 16. Invariants (property tests)
+1. Team total = Σ batter runs + Σ extras.
+2. Σ bowler runs + byes + leg byes + penalties = team total (both no-ball conventions).
+3. Completed overs ≤ allocation; wickets ≤ limit.
+4. `replay(log)` equals the incremental fold, every time.
+5. Replay from any snapshot equals a full replay.
+6. Undo removes exactly the last event; redo restores it.
+7. Striker ≠ non-striker; both are batting for the batting side.
+8. Σ partnership runs (+ runs awaiting the next partnership) = total − penalty runs added
+   outside play; FoW entries = wickets.
+9. Σ bowler legal balls = innings legal balls.
+10. Hostile events fail only with `RuleViolation`.
 
-1. Team total = Σ batter runs + Σ extras (R-RUN-05).
-2. Σ bowler runs + byes + leg byes + penalty runs = team total (with `noBallByesScoredAs` taken into account).
-3. Legal balls ≤ quota (R-INN-04); wickets ≤ limit (R-INN-05).
-4. Determinism: `replay(log)` deep-equals `replay(log)`, and also the incremental fold.
-5. Snapshot equivalence: `replayFrom(snapshot at seq k, log[k+1..])` ≡ `replay(log)`.
-6. Undo / redo (R-UNDO-02, R-UNDO-03).
-7. Striker ≠ non-striker; both are in the batting XI and not dismissed.
-8. Σ partnership runs = team total (penalty runs between deliveries belong to the current
-   partnership). Number of FoW entries = wickets.
-9. Bowler legal balls sum = innings legal balls.
+## 17. Known gaps and simplifications
+
+- Keeper changes are not modelled except through a concussion replacement of the keeper.
+- A bowler completing someone else's over does not "start" an over for `bowlerMaxOvers`
+  (legal balls still count toward ball-based limits).
+- An umpire's miscount in the final over of an innings cannot be recorded (the innings closes at
+  the full count).
+- Boundary-count ties end as ties (the 2019 regulations had further steps).
+- The follow-on margin uses match length, not days remaining when play started (Law 14.1.2);
+  set `followOnMargin` explicitly when a match starts late.
+- Fielding restrictions, new balls and session timings are not scored.
+- Historical matches converted from Cricsheet record revised targets at the start of the chase,
+  since the data does not say when play stopped.
