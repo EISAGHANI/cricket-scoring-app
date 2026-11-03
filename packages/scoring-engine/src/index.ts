@@ -34,7 +34,13 @@ export {
 	type BowlerEligibility,
 } from "./reducer/context";
 export { scoreDelivery, type DeliveryScore } from "./reducer/delivery";
-export { aggregate, followOnMargin } from "./reducer/innings";
+export {
+	aggregate,
+	followOnMargin,
+	nextInnings,
+	tieBreakPending,
+	type NextInnings,
+} from "./reducer/innings";
 
 export { replay, replayFrom, appendEvent } from "./log/replay";
 export { resolveLog } from "./log/resolve";
