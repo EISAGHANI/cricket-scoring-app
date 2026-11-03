@@ -15,7 +15,7 @@ export class Forbidden extends Error {
 	}
 }
 
-type Scope = { scopeType: "ORGANIZATION" | "CLUB" | "TEAM"; scopeId: string };
+type Scope = { scopeType: "ORGANIZATION" | "CLUB" | "TEAM" | "MATCH"; scopeId: string };
 
 const one = (scopeType: Scope["scopeType"], scopeId: string | null): Scope[] =>
 	scopeId === null ? [] : [{ scopeType, scopeId }];
@@ -28,6 +28,9 @@ export function scopesOf(resource: Resource): Record<Relation, Scope[]> {
 		team: [],
 		playerTeams: [],
 		playerClubs: [],
+		match: [],
+		matchTeams: [],
+		matchClubs: [],
 	};
 	switch (resource.type) {
 		case "organization":
@@ -43,6 +46,13 @@ export function scopesOf(resource: Resource): Record<Relation, Scope[]> {
 				...none,
 				playerTeams: resource.teams.flatMap((t) => one("TEAM", t.teamId)),
 				playerClubs: resource.teams.flatMap((t) => one("CLUB", t.clubId)),
+			};
+		case "match":
+			return {
+				...none,
+				match: one("MATCH", resource.id),
+				matchTeams: resource.teams.flatMap((t) => one("TEAM", t.teamId)),
+				matchClubs: resource.teams.flatMap((t) => one("CLUB", t.clubId)),
 			};
 		case "user":
 			return none;
@@ -68,6 +78,7 @@ export function ownerOf(resource: Resource): string | null {
 		case "user":
 			return resource.id;
 		case "venue":
+		case "match":
 			return resource.createdBy;
 		case "organization":
 		case "club":

@@ -47,7 +47,14 @@ export type Resource =
 			/** Teams the player is currently in, with their clubs. */
 			teams: { teamId: string; clubId: string | null }[];
 	  }
-	| { type: "user"; id: string };
+	| { type: "user"; id: string }
+	| {
+			type: "match";
+			id: string | null;
+			createdBy: string | null;
+			/** Both sides, with their clubs. */
+			teams: { teamId: string; clubId: string | null }[];
+	  };
 
 /** How a grant's scope relates to the resource. */
 export type Relation =
@@ -55,7 +62,10 @@ export type Relation =
 	| "club" // CLUB scope = the club (or the team's club)
 	| "team" // TEAM scope = the team
 	| "playerTeams" // TEAM scope = any of the player's teams
-	| "playerClubs"; // CLUB scope = any of the player's teams' clubs
+	| "playerClubs" // CLUB scope = any of the player's teams' clubs
+	| "match" // MATCH scope = the match
+	| "matchTeams" // TEAM scope = either side
+	| "matchClubs"; // CLUB scope = either side's club
 
 export type Grant =
 	| { kind: "role"; roles: readonly Role[]; via: Relation }
@@ -143,6 +153,16 @@ export const POLICY = {
 	},
 
 	"user.update": { resource: "user", grants: [{ kind: "owner" }] },
+
+	/** Staff of either side may arrange a match (friendlies against any team). */
+	"match.create": {
+		resource: "match",
+		grants: [role(TEAM_STAFF, "matchTeams"), role(["CLUB_ADMIN"], "matchClubs")],
+	},
+	/** Edit the setup, add scorers, cancel. The owner is whoever created the match. */
+	"match.manage": { resource: "match", grants: [{ kind: "owner" }] },
+	/** Record events. Scorers hold SCORER on the MATCH scope (PHASE_3_PLAN.md Q3). */
+	"match.score": { resource: "match", grants: [{ kind: "owner" }, role(["SCORER"], "match")] },
 } as const satisfies Record<string, { resource: Resource["type"]; grants: readonly Grant[] }>;
 
 export type Action = keyof typeof POLICY;

@@ -39,6 +39,8 @@ function resourceFor(type: Resource["type"], grant: Grant): Resource {
 			};
 		case "user":
 			return { type, id: OWNER };
+		case "match":
+			return { type, id: "m1", createdBy: OWNER, teams: [{ teamId: "t1", clubId: "c1" }] };
 	}
 }
 
@@ -48,6 +50,9 @@ const SCOPE = {
 	team: { scopeType: "TEAM", scopeId: "t1" },
 	playerTeams: { scopeType: "TEAM", scopeId: "t1" },
 	playerClubs: { scopeType: "CLUB", scopeId: "c1" },
+	match: { scopeType: "MATCH", scopeId: "m1" },
+	matchTeams: { scopeType: "TEAM", scopeId: "t1" },
+	matchClubs: { scopeType: "CLUB", scopeId: "c1" },
 } as const;
 
 describe("policy matrix (generated from POLICY)", () => {
@@ -179,10 +184,40 @@ describe("can", () => {
 			team: [],
 			playerTeams: [],
 			playerClubs: [],
+			match: [],
+			matchTeams: [],
+			matchClubs: [],
 		});
 		expect(ownerOf({ type: "organization", id: "o" })).toBeNull();
 		expect(ownerOf({ type: "club", id: "c" })).toBeNull();
 		expect(ownerOf({ type: "team", id: "t", clubId: null })).toBeNull();
+	});
+
+	it("matches: either side's staff may create; scorers score only their own match", () => {
+		const match = (createdBy: string | null) => ({
+			type: "match" as const,
+			id: "m1",
+			createdBy,
+			teams: [
+				{ teamId: "t1", clubId: null },
+				{ teamId: "t2", clubId: "c2" },
+			],
+		});
+		const awayCaptain = subject([{ role: "CAPTAIN", scopeType: "TEAM", scopeId: "t2" }]);
+		expect(can(awayCaptain, "match.create", match(null))).toBe(true);
+		const awayClub = subject([{ role: "CLUB_ADMIN", scopeType: "CLUB", scopeId: "c2" }]);
+		expect(can(awayClub, "match.create", match(null))).toBe(true);
+		// A player of either side may not create or score.
+		const player = subject([{ role: "PLAYER", scopeType: "TEAM", scopeId: "t1" }]);
+		expect(can(player, "match.create", match(null))).toBe(false);
+		expect(can(player, "match.score", match("u-x"))).toBe(false);
+		// Team staff do not score unless they created the match or were added as scorers.
+		expect(can(awayCaptain, "match.score", match("u-x"))).toBe(false);
+		const scorer = subject([{ role: "SCORER", scopeType: "MATCH", scopeId: "m1" }]);
+		expect(can(scorer, "match.score", match("u-x"))).toBe(true);
+		expect(can(scorer, "match.score", { ...match("u-x"), id: "m2" })).toBe(false);
+		expect(can(scorer, "match.manage", match("u-x"))).toBe(false);
+		expect(can(subject([], "u-x"), "match.manage", match("u-x"))).toBe(true);
 	});
 
 	it("authorize throws Forbidden with the action", () => {
