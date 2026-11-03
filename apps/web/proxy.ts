@@ -22,6 +22,8 @@ export const config = {
 		"/teams/new",
 		"/players/new",
 		"/organizations/new",
+		"/matches/new",
+		"/matches/:id/score",
 		"/:kind(clubs|teams|organizations|players)/:slug/edit",
 	],
 };
