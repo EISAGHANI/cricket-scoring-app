@@ -151,3 +151,20 @@ dialog.sheet[open] {
 		animation: none;
 	}
 }
+
+/* Scorer "large text" mode: bigger type and maximum contrast for scoring in bright sunlight. */
+.scorer-large {
+	--bg: #ffffff;
+	--surface: #ffffff;
+	--surface-2: #eef0ee;
+	--ink: #000000;
+	--muted: #1f2a23;
+	--line: #4b5a50;
+	font-size: 1.15rem;
+}
+.scorer-large .text-xs {
+	font-size: 0.9rem;
+}
+.scorer-large .text-sm {
+	font-size: 1.05rem;
+}
