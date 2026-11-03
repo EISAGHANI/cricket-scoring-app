@@ -19,6 +19,8 @@ import {
 	pendingInvitations,
 	pendingJoinRequests,
 } from "@/features/invitations/queries";
+import { MatchSection } from "@/features/matches/match-tile";
+import { listMatches } from "@/features/matches/queries";
 import { getTeamBySlug, type TeamSummary } from "@/features/teams/queries";
 import { viewerCan } from "@/lib/services/server";
 
@@ -71,12 +73,28 @@ async function Team({ params }: { params: PageProps<"/teams/[slug]">["params"] }
 					<TeamControls team={team} />
 				</Suspense>
 			</div>
+			<Suspense fallback={null}>
+				<TeamMatches team={team} />
+			</Suspense>
 			<Suspense fallback={<PageSkeleton />}>
 				<Squad team={team} />
 			</Suspense>
 			<Suspense fallback={null}>
 				<Membership team={team} />
 			</Suspense>
+		</>
+	);
+}
+
+/** Live, upcoming and recent matches for this team (nothing when it has none). */
+async function TeamMatches({ team }: { team: TeamSummary }) {
+	const { live, upcoming, recent } = await listMatches(team.id);
+	if (live.length + upcoming.length + recent.length === 0) return null;
+	return (
+		<>
+			<MatchSection title="Live" matches={live} />
+			<MatchSection title="Upcoming" matches={upcoming.slice(0, 4)} />
+			<MatchSection title="Recent results" matches={recent.slice(0, 4)} />
 		</>
 	);
 }

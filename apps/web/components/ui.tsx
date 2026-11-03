@@ -9,7 +9,6 @@ import {
 	useRef,
 } from "react";
 import { X } from "lucide-react";
-import { initials } from "@/lib/cricket/format";
 
 export function cx(...classes: Array<string | false | null | undefined>) {
 	return classes.filter(Boolean).join(" ");
@@ -81,35 +80,6 @@ export function SectionTitle({ children, action }: { children: ReactNode; action
 			</h2>
 			{action}
 		</div>
-	);
-}
-
-/* ------------------------------ Avatar ------------------------------ */
-
-export function TeamBadge({
-	name,
-	color,
-	size = 44,
-	label,
-}: {
-	name: string;
-	color: string;
-	size?: number;
-	label?: string;
-}) {
-	return (
-		<span
-			aria-hidden="true"
-			className="inline-flex shrink-0 items-center justify-center rounded-2xl font-display font-bold text-white ring-1 ring-black/5"
-			style={{
-				width: size,
-				height: size,
-				fontSize: size * 0.38,
-				background: `linear-gradient(145deg, ${color}, color-mix(in srgb, ${color} 70%, black))`,
-			}}
-		>
-			{label ?? initials(name)}
-		</span>
 	);
 }
 

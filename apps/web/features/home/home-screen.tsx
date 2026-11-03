@@ -1,114 +1,100 @@
-"use client";
-
-import {
-	ArrowRight,
-	CirclePlus,
-	Sparkles,
-	Trophy,
-	Users,
-	WifiOff,
-	Undo2,
-	ClipboardList,
-} from "lucide-react";
-import { computeMatchState, matchPhase } from "@/lib/cricket/engine";
-import { loadSampleTeams, useDB } from "@/lib/store";
-import { Button, Card, LinkButton, PageSkeleton, SectionTitle } from "@/components/ui";
-import { MatchCard } from "@/features/matches/match-card";
+import { ArrowRight, CirclePlus, ClipboardList, Radio, Trophy, Undo2 } from "lucide-react";
+import { Suspense } from "react";
+import { Card, LinkButton, SectionTitle, Skeleton } from "@/components/ui";
+import { MatchTile } from "@/features/matches/match-tile";
+import { listMatches } from "@/features/matches/queries";
 
 export function HomeScreen() {
-	const db = useDB();
-	if (!db) return <PageSkeleton />;
-
-	const withPhase = db.matches.map((m) => ({ m, phase: matchPhase(computeMatchState(m)) }));
-	const ongoing = withPhase.filter((x) => x.phase !== "completed").map((x) => x.m);
-	const finished = withPhase
-		.filter((x) => x.phase === "completed")
-		.map((x) => x.m)
-		.slice(0, 4);
-	const hasTeams = db.teams.length >= 2;
-
 	return (
 		<div className="space-y-10">
 			<section className="pitch relative overflow-hidden rounded-[2rem] px-6 py-9 shadow-card sm:px-10 sm:py-12">
 				<div className="relative z-10 max-w-xl">
 					<p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1 text-xs font-semibold uppercase tracking-wider">
-						<Sparkles className="size-3.5" aria-hidden="true" /> Ball-by-ball cricket scoring
+						<Radio className="size-3.5" aria-hidden="true" /> Live ball-by-ball cricket
 					</p>
 					<h1 className="font-display text-5xl font-bold uppercase leading-[0.95] tracking-wide sm:text-6xl">
 						Score every ball.
 						<br />
-						<span className="text-[#b8f5cf]">Keep it simple.</span>
+						<span className="text-[#b8f5cf]">Follow every match.</span>
 					</h1>
 					<p className="mt-4 max-w-md text-[15px] text-white/80">
-						Set up teams, score live with one tap per ball, and get a full scorecard and result -
-						right in your browser, even without signal at the ground.
+						Set up a match from your squads, score it with one tap per ball, and everyone can follow
+						the live scorecard and commentary.
 					</p>
 					<div className="mt-7 flex flex-wrap gap-3">
-						<LinkButton href="/local/matches/new" size="lg" variant="light">
+						<LinkButton href="/matches/new" size="lg" variant="light">
 							<CirclePlus className="size-5" aria-hidden="true" /> New match
 						</LinkButton>
 						<LinkButton
-							href="/local/teams"
+							href="/matches"
 							size="lg"
 							variant="ghost"
 							className="text-white ring-1 ring-white/30 hover:bg-white/10"
 						>
-							<Users className="size-5" aria-hidden="true" /> Teams
+							All matches
 						</LinkButton>
 					</div>
 				</div>
 				<StumpsArt />
 			</section>
 
-			{!hasTeams && (
-				<Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
-					<div className="grid size-14 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand">
-						<Users className="size-7" aria-hidden="true" />
-					</div>
-					<div className="flex-1">
-						<h2 className="font-display text-2xl font-bold uppercase tracking-wide">
-							Start with two teams
-						</h2>
-						<p className="text-sm text-muted">
-							Create your own squads, or load two sample teams to try scoring right away.
-						</p>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<Button variant="secondary" onClick={loadSampleTeams}>
-							<Sparkles className="size-4" aria-hidden="true" /> Load sample teams
-						</Button>
-						<LinkButton href="/local/teams">Create team</LinkButton>
-					</div>
-				</Card>
-			)}
+			<Suspense fallback={<Skeleton className="h-40" />}>
+				<Matches />
+			</Suspense>
 
-			{ongoing.length > 0 && (
+			<section className="grid gap-4 sm:grid-cols-3">
+				<Feature icon={<ClipboardList className="size-5" />} title="Full scorecards">
+					Batting, bowling, extras, fall of wickets, partnerships and commentary.
+				</Feature>
+				<Feature icon={<Undo2 className="size-5" />} title="Fearless undo">
+					Tapped the wrong button? Undo restores the exact previous state, and nothing is ever lost.
+				</Feature>
+				<Feature icon={<Radio className="size-5" />} title="Live for everyone">
+					Fans follow the score as it happens, from any phone.
+				</Feature>
+			</section>
+		</div>
+	);
+}
+
+async function Matches() {
+	const { live, upcoming, recent } = await listMatches();
+	return (
+		<>
+			{live.length > 0 && (
 				<section>
-					<SectionTitle>Continue scoring</SectionTitle>
+					<SectionTitle>Live now</SectionTitle>
 					<div className="grid gap-4 sm:grid-cols-2">
-						{ongoing.map((m) => (
-							<MatchCard key={m.id} match={m} />
+						{live.slice(0, 6).map((m) => (
+							<MatchTile key={m.id} match={m} />
 						))}
 					</div>
 				</section>
 			)}
-
+			{upcoming.length > 0 && (
+				<section>
+					<SectionTitle>Upcoming</SectionTitle>
+					<div className="grid gap-4 sm:grid-cols-2">
+						{upcoming.slice(0, 4).map((m) => (
+							<MatchTile key={m.id} match={m} />
+						))}
+					</div>
+				</section>
+			)}
 			<section>
 				<SectionTitle
 					action={
-						db.matches.length > 0 && (
-							<LinkButton href="/local/matches" variant="ghost" size="sm">
-								All matches <ArrowRight className="size-4" aria-hidden="true" />
-							</LinkButton>
-						)
+						<LinkButton href="/matches" variant="ghost" size="sm">
+							All matches <ArrowRight className="size-4" aria-hidden="true" />
+						</LinkButton>
 					}
 				>
 					Recent results
 				</SectionTitle>
-				{finished.length > 0 ? (
+				{recent.length > 0 ? (
 					<div className="grid gap-4 sm:grid-cols-2">
-						{finished.map((m) => (
-							<MatchCard key={m.id} match={m} />
+						{recent.slice(0, 4).map((m) => (
+							<MatchTile key={m.id} match={m} />
 						))}
 					</div>
 				) : (
@@ -118,19 +104,7 @@ export function HomeScreen() {
 					</Card>
 				)}
 			</section>
-
-			<section className="grid gap-4 sm:grid-cols-3">
-				<Feature icon={<ClipboardList className="size-5" />} title="Full scorecards">
-					Batting, bowling, extras, fall of wickets and over-by-over history.
-				</Feature>
-				<Feature icon={<Undo2 className="size-5" />} title="Fearless undo">
-					Tapped the wrong button? Undo restores the exact previous state.
-				</Feature>
-				<Feature icon={<WifiOff className="size-5" />} title="Works offline">
-					Matches are saved on this device as you score - no account needed.
-				</Feature>
-			</section>
-		</div>
+		</>
 	);
 }
 
