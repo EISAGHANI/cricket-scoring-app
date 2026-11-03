@@ -2,6 +2,7 @@
  * Events typically entered by or on behalf of match officials: penalty runs, strike overrides,
  * declarations, interruptions, target revision, substitutions and the result.
  */
+import { jsonEqual } from "../internal/equal";
 import { violation } from "../errors";
 import { must } from "../internal/must";
 import {
@@ -354,7 +355,7 @@ export function resultIfNoMorePlay(state: MatchState, options: EngineOptions): M
 }
 
 function sameResult(a: MatchResult, b: MatchResult): boolean {
-	return JSON.stringify(a) === JSON.stringify(b);
+	return jsonEqual(a, b);
 }
 
 export function applyMatchResult(

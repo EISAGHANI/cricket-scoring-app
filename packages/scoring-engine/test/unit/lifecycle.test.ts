@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { needsBatter, parScore } from "../../src";
+import { jsonEqual } from "../../src/internal/equal";
 import {
 	applyEvent,
 	awaiting,
@@ -315,5 +316,36 @@ describe("innings end and limited-overs results", () => {
 			override: true,
 		});
 		expect(format.resultText(m.state, m.state.result!)).toBe("Team B won (award)");
+	});
+
+	it("R-RES-06: the comparison ignores key order (state restored from a JSONB snapshot)", () => {
+		const m = firstInnings("4! . . . . .").open("b1", "b2", "a1").balls("1 1 . . . .");
+		const result = m.state.provisionalResult!;
+		expect(result.kind).toBe("WIN");
+		// Postgres jsonb stores object keys in its own order; simulate it by reversing every object.
+		const reorder = (v: unknown): unknown =>
+			Array.isArray(v)
+				? v.map(reorder)
+				: v !== null && typeof v === "object"
+					? Object.fromEntries(
+							Object.entries(v)
+								.reverse()
+								.map(([k, x]) => [k, reorder(x)]),
+						)
+					: v;
+		const restored = reorder(m.state) as typeof m.state;
+		const next = applyEvent(restored, {
+			id: "r",
+			seq: restored.lastSeq + 1,
+			type: "MATCH_RESULT",
+			payload: { result, override: false },
+		});
+		expect(next.result).toEqual(result);
+		expect(jsonEqual([1, { a: 1 }], [1, { a: 1 }])).toBe(true);
+		expect(jsonEqual([1], { 0: 1 })).toBe(false);
+		expect(jsonEqual({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+		expect(jsonEqual({ a: 1 }, { b: 1 })).toBe(false);
+		expect(jsonEqual({ a: 1 }, null)).toBe(false);
+		expect(jsonEqual(1, "1")).toBe(false);
 	});
 });
