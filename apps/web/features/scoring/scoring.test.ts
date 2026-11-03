@@ -263,7 +263,11 @@ describe("submitting events", () => {
 		await s.send("DELIVERY", ball({ runs: 1 }));
 		const state = await loadState(db, matchId);
 		expect(state.provisionalResult).toMatchObject({ kind: "WIN", winnerTeamId: away.id });
-		await s.send("MATCH_RESULT", { result: state.provisionalResult, override: false });
+		const { result } = await s.send("MATCH_RESULT", {
+			result: state.provisionalResult,
+			override: false,
+		});
+		expect(result.statusChanged).toBe(true);
 		[m] = await db.select().from(matches).where(eq(matches.id, matchId));
 		expect(m).toMatchObject({ status: "COMPLETED", lastSeq: 13 });
 		expect(m!.summary?.status).toBe("Tigers won by 2 wickets (4 balls left)");
@@ -301,6 +305,7 @@ describe("submitting events", () => {
 		await expect(submitEvent(await as(db, manager), matchId, sub)).resolves.toEqual({
 			lastSeq: 4,
 			duplicate: true,
+			statusChanged: false,
 		});
 		// Same id, different content: refused.
 		const changed = { ...sub, event: { ...sub.event, payload: ball({ runs: 3 }) } };

@@ -39,9 +39,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/matches
 	try {
 		const result = await submitEvent(service, id.data, body);
 		if (!result.duplicate) {
-			// The match page must show the new ball on its next render; lists may lag briefly.
+			// The match page must show the new ball on its next render. Lists must show a match
+			// moving between live / upcoming / results at once; score changes may lag briefly.
 			revalidateTag(matchTags.one(id.data), { expire: 0 });
-			revalidateTag(matchTags.list, "max");
+			revalidateTag(matchTags.list, result.statusChanged ? { expire: 0 } : "max");
 		}
 		return json(result);
 	} catch (error) {

@@ -44,6 +44,8 @@ export interface Accepted {
 	lastSeq: number;
 	/** The event was already stored (a retry); nothing changed. */
 	duplicate: boolean;
+	/** The match's status changed (it started, finished, or an undo reopened it). */
+	statusChanged: boolean;
 }
 
 type Row = typeof ballEvents.$inferSelect;
@@ -120,7 +122,7 @@ export async function submitEvent(
 				existing.seq === event.seq &&
 				existing.type === event.type &&
 				isDeepStrictEqual(existing.payload, event.payload);
-			if (same) return { lastSeq: m.lastSeq, duplicate: true };
+			if (same) return { lastSeq: m.lastSeq, duplicate: true, statusChanged: false };
 			throw new ScoringError(409, "DUPLICATE_ID", "Another event already has this id", {
 				lastSeq: m.lastSeq,
 			});
@@ -194,7 +196,7 @@ export async function submitEvent(
 				.values({ matchId, ...snapshot })
 				.onConflictDoUpdate({ target: matchStateSnapshots.matchId, set: snapshot });
 		}
-		return { lastSeq: event.seq, duplicate: false };
+		return { lastSeq: event.seq, duplicate: false, statusChanged: status !== m.status };
 	});
 }
 
