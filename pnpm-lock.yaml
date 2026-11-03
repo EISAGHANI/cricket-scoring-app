@@ -343,6 +343,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@cricket/scoring-engine':
+        specifier: workspace:*
+        version: link:../scoring-engine
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(kysely@0.29.8)(postgres@3.4.9)
