@@ -1,6 +1,6 @@
 /**
- * Demo data for Phase 2 (brief §10, the parts that exist so far): one league, two clubs, eight
- * teams with 15 players each, and a user for every role. Runs through the real services so roles,
+ * Demo data (brief §10, the parts that exist so far): one league, two clubs, eight teams with 15
+ * players each, a user for every role, and matches: three completed, one live, one upcoming. Runs through the real services so roles,
  * squads and audit entries are exactly what the app would create.
  *
  *   pnpm --filter @cricket/web db:seed            # refuses if data exists
@@ -17,6 +17,9 @@ import { createOrganization } from "@/features/organizations/service";
 import { addSquadPlayer, createOwnProfile, setSquadRole } from "@/features/players/service";
 import { createTeam } from "@/features/teams/service";
 import { createVenue } from "@/features/venues/service";
+import { createMatch, startPayload } from "@/features/matches/service";
+import { loadState, submitEvent } from "@/features/scoring/service";
+import { simulateNext } from "@/features/scoring/simulate";
 import type { ServiceContext } from "@/lib/services/context";
 
 const url = process.env.DATABASE_URL;
@@ -153,10 +156,11 @@ async function main(): Promise<void> {
 			city: "Metro City",
 			organizationId: org.id,
 		});
-		await createVenue(await ctxFor(db, leagueAdmin), {
+		const park = await createVenue(await ctxFor(db, leagueAdmin), {
 			name: "Riverside Park",
 			city: "Metro City",
 		});
+		const seededTeams: { id: string; manager: string }[] = [];
 
 		const clubs = [
 			{
@@ -201,6 +205,7 @@ async function main(): Promise<void> {
 					grantedBy: clubAdmin,
 				});
 				const managerCtx = await ctxFor(db, manager);
+				seededTeams.push({ id: team.id, manager });
 
 				// The captain has an account and owns their profile.
 				const captainName = playerName();
@@ -234,6 +239,7 @@ async function main(): Promise<void> {
 				if (ti === 0) await setSquadRole(managerCtx, team.id, own.id, { squadRole: "CAPTAIN" });
 			}
 		}
+		await seedMatches(db, seededTeams, park.id);
 		const count = async (t: typeof schema.players | typeof schema.teams | typeof schema.users) =>
 			(await db.select({ id: t.id }).from(t)).length;
 		console.log(
@@ -244,6 +250,94 @@ async function main(): Promise<void> {
 		);
 	} finally {
 		await close();
+	}
+}
+
+/** The XI for a team: captain, vice-captain and keeper first, then the rest of the squad. */
+async function selection(db: Database, teamId: string) {
+	const rows = await db
+		.select({ id: schema.teamPlayers.playerId, role: schema.teamPlayers.squadRole })
+		.from(schema.teamPlayers)
+		.where(eq(schema.teamPlayers.teamId, teamId));
+	const order = { CAPTAIN: 0, VICE_CAPTAIN: 1, WICKET_KEEPER: 2, PLAYER: 3 } as const;
+	rows.sort((a, b) => order[a.role] - order[b.role]);
+	const xi = rows.slice(0, 11).map((r) => r.id);
+	return {
+		playerIds: xi,
+		substituteIds: rows.slice(11, 13).map((r) => r.id),
+		captainId: rows.find((r) => r.role === "CAPTAIN")!.id,
+		keeperId: rows.find((r) => r.role === "WICKET_KEEPER")!.id,
+	};
+}
+
+/** Play a match through the real event service, stopping early when `until` says so. */
+async function play(
+	db: Database,
+	userId: string,
+	matchId: string,
+	until: (state: Awaited<ReturnType<typeof loadState>>) => boolean = () => false,
+) {
+	const ctx = await ctxFor(db, userId);
+	let seq = 0;
+	const send = async (type: string, payload: unknown) => {
+		seq++;
+		await submitEvent(ctx, matchId, {
+			matchId,
+			event: { id: crypto.randomUUID(), seq, type, payload },
+			deviceId: "seed",
+			clientTimestamp: new Date().toISOString(),
+			schemaVersion: 1,
+		});
+	};
+	await send("MATCH_STARTED", await startPayload(db, matchId));
+	let state = await loadState(db, matchId);
+	for (;;) {
+		if (until(state)) return;
+		const next = simulateNext(state, rand);
+		if (next === null) return;
+		await send(next.type, next.payload);
+		state = await loadState(db, matchId);
+	}
+}
+
+async function seedMatches(
+	db: Database,
+	teams: { id: string; manager: string }[],
+	venueId: string,
+) {
+	const day = 24 * 60 * 60 * 1000;
+	const at = (days: number) => new Date(Date.UTC(2026, 9, 25, 13, 0) + days * day).toISOString();
+	// Senior first XIs and second XIs from both clubs (indexes: 0-3 Riverside, 4-7 Northgate).
+	const fixtures = [
+		{ home: 0, away: 4, when: at(-14), state: "done" },
+		{ home: 1, away: 5, when: at(-7), state: "done" },
+		{ home: 4, away: 1, when: at(-3), state: "done" },
+		{ home: 0, away: 5, when: at(0), state: "live" },
+		{ home: 5, away: 0, when: at(14), state: "upcoming" },
+	] as const;
+	for (const f of fixtures) {
+		const home = teams[f.home]!;
+		const away = teams[f.away]!;
+		const match = await createMatch(await ctxFor(db, home.manager), {
+			homeTeamId: home.id,
+			awayTeamId: away.id,
+			preset: "T20",
+			venueId,
+			scheduledAt: f.when,
+			home: await selection(db, home.id),
+			away: await selection(db, away.id),
+			umpire1: "Aleem Dar",
+			umpire2: "Kumar Dharmasena",
+		});
+		if (f.state === "done") await play(db, home.manager, match.id);
+		if (f.state === "live") {
+			await play(
+				db,
+				home.manager,
+				match.id,
+				(s) => s.innings.length === 2 && s.innings[1]!.legalBalls >= 45,
+			);
+		}
 	}
 }
 

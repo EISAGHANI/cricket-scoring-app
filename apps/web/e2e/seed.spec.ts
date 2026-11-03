@@ -12,6 +12,15 @@ test("seeded pages are populated", async ({ page }) => {
 	await expect(squad.getByRole("link")).toHaveCount(15);
 	// Minors without guardian consent are shown as initial + surname to visitors.
 	await expect(squad.getByRole("link", { name: /^[A-Z]\. \S+$/ }).first()).toBeVisible();
+	// Seeded matches: results, a live chase and an upcoming fixture.
+	await page.goto("/matches");
+	await expect(page.getByRole("heading", { name: "Live" })).toBeVisible();
+	await expect(page.getByRole("heading", { name: "Recent results" })).toBeVisible();
+	await page
+		.getByRole("link", { name: /need \d+ from \d+ balls/ })
+		.first()
+		.click();
+	await expect(page.getByRole("region", { name: "Score" })).toBeVisible();
 	await page.goto("/organizations/metro");
 	await expect(page.getByRole("heading", { name: "Metro Cricket League" })).toBeVisible();
 });
