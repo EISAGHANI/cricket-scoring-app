@@ -4,7 +4,8 @@
 persistence, and a live scorecard page. Online only: realtime sockets, offline queue and the
 scoring lock/handoff are Phase 4.
 
-**Status: awaiting approval.** Nothing below is implemented yet.
+**Status: complete (2026-11-03).** Approved with the defaults for Q1–Q5. See §8 for what was
+built, how it differs from this plan, and the known gaps.
 
 ## 1. Decisions needed
 
@@ -80,3 +81,44 @@ scoring lock/handoff are Phase 4.
 | Two scorers before the Phase 4 lock        | Server serializes with expected `seq`; the losing client gets a 409 and resyncs |
 | Revalidating the match cache on every ball | Tag per match only; lists revalidate on status changes                          |
 | Replay cost for long matches               | Snapshots at each over; a full Test replay already takes about 1 ms             |
+
+## 8. Outcome
+
+**Built (M1–M6):**
+
+- **Data (0003):** `matches` (with a `CANCELLED` status and a `summary` projection for lists),
+  `match_players` (with the public-safe `name` and batting `position`), `match_officials`
+  (umpire and referee names), `ball_events` with the append-only trigger, and one
+  `match_state_snapshots` row per match.
+- **Permissions:** `match.create` (staff of either side), `match.manage` (the creator),
+  `match.score` (the creator, or `SCORER` on the `MATCH` scope).
+- **Write path:** `POST /api/matches/:id/events` as in §3, plus a same-origin check (Route
+  Handlers don't get the CSRF protection Server Actions have). `MATCH_STARTED` must equal the
+  payload derived from the setup. `GET …/events?after=` pages through the log.
+- **Scorer pad** (`/matches/:id/score`): a Zustand store applies each tap with the local engine
+  first, posts in order, and resyncs on 409/422; unsent taps can be retried. `END_OF_OVER` is
+  automatic (and undone together with its ball). Guided wicket flow; extras including no-ball
+  byes and overthrow boundaries; mid-over bowler changes, retirements, standalone dismissals,
+  penalty runs, interruptions, declarations, super overs, follow-on, bowl-out and results.
+  Optional wagon-wheel and pitch-map capture (Q2), wake lock, haptics and a large-text,
+  high-contrast mode.
+- **Pages:** setup wizard (`/matches/new`), live match page with 5-second polling (Q4),
+  scorecard, auto-commentary, match lists on `/matches`, the home page and team pages.
+- **Removed:** the legacy local scorer, its engine and `/local` (Q1, ADR-0002).
+- **Seed:** three completed T20s, one live and one upcoming, played through the real event
+  service by a simulator (`features/scoring/simulate.ts`).
+
+**Deviations from the plan:**
+
+| Plan                                     | Built                                                         | Why                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Snapshot PK `(match_id, seq)`            | One row per match (latest only)                               | A history rewrite in the tail falls back to a full replay, so older snapshots are never read |
+| `match_officials` includes scorers       | Scorers are `role_assignments` (`SCORER`, `MATCH` scope) only | One source of truth for permissions                                                          |
+| Names come from the squad at render time | Events carry the public-safe name at selection                | Events are immutable and public; minors appear as initials                                   |
+| —                                        | Engine fix: `MATCH_RESULT` comparison ignores key order       | JSONB reorders keys, so a snapshot-restored state rejected a correct result                  |
+
+**Known gaps (later phases):** realtime sockets, the offline queue and the scoring lock and
+handoff (Phase 4). The PWA manifest moves to Phase 4 with offline support. Target revision after
+rain needs the DLS resource table wired in: the pad offers revised overs only, which works for
+ARR and manual formats. `CORRECTION` events have no UI yet (undo only). Rate limiting on the
+scoring API is Phase 8, and manual commentary edits are Phase 5.

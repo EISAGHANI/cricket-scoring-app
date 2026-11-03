@@ -290,3 +290,32 @@ cookies are `HttpOnly` + `SameSite=Lax` (both covered by end-to-end tests).
 **Consequences.** XSS defence relies on React's escaping and on blocking every other script
 source, not on nonces. Revisit when SRI is stable. The streaming overlay route (Phase 7) will need
 its own `frame-ancestors` rule for OBS.
+
+## ADR-0017 — Phase 3: online scoring decisions
+
+**Status:** Accepted (approved by owner, 2026-11-03)
+
+**Decisions (PHASE_3_PLAN.md Q1–Q5, defaults approved).**
+
+1. The legacy local scorer (`/local`, `lib/cricket`, `lib/store.ts`) is deleted now that the
+   server-backed scorer works. Browser-only matches were not migrated.
+2. Wagon-wheel and pitch-map taps are optional per ball (off by default, a per-device toggle) and
+   stored in `DELIVERY.payload.detail`.
+3. Staff of either side may create a match. The creator always scores and may add scorers
+   (people connected to either team), stored as `SCORER` role assignments on the `MATCH` scope.
+   Only the creator manages the match.
+4. Until Phase 4, the live page polls `GET /api/matches/:id/events?after=<seq>` every 5 seconds
+   while the tab is visible.
+5. Umpires and the referee are free-text names (`match_officials`); accounts come in Phase 6.
+
+**Also decided while building.**
+
+- The event API is a Route Handler (so the Phase 4 sync queue can reuse it), which means it checks
+  `Origin` itself for CSRF protection.
+- `MATCH_STARTED` must equal the payload derived from the stored setup, so a scorer can't change
+  the teams or rules.
+- Events store each player's public-safe name (minors as initials), because the log is permanent
+  and public.
+- One snapshot row per match; an `UNDO` or `CORRECTION` after it triggers a full replay.
+
+**Consequences.** Two scorers race on `seq` (the loser resyncs) until the Phase 4 scoring lock.

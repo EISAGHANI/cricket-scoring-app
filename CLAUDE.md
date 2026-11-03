@@ -3,8 +3,8 @@
 Cricket scoring & league platform (CricClubs + CricHeroes class). The full brief is
 `docs/PROJECT_BRIEF.md`. Read it before starting a phase.
 
-**Current phase:** 2 complete (auth, RBAC, organisations, clubs, teams, players, invitations,
-uploads). Next: Phase 3 (match setup + scorer PWA, online). Plan each phase and get owner approval
+**Current phase:** 3 complete (match setup, event API, scorer pad, live match pages; see
+`docs/PHASE_3_PLAN.md` §8). Next: Phase 4 (realtime + offline). Plan each phase and get owner approval
 before writing its feature code.
 
 ## Working rules (from the brief, condensed)
@@ -46,7 +46,7 @@ before writing its feature code.
 | `pnpm --filter @cricket/scoring-engine bench`                                   | Replay timings over the golden matches                             |
 | `pnpm --filter @cricket/db db:migrate` / `db:generate` / `db:check`             | Apply / generate / check migrations (reads `packages/db/.env`)     |
 | `pnpm --filter @cricket/web storage:init`                                       | Create the media bucket (public read of `media/*` only)            |
-| `pnpm --filter @cricket/web db:seed --reset`                                    | Demo data: league, 2 clubs, 8 teams × 15 players, a user per role  |
+| `pnpm --filter @cricket/web db:seed --reset`                                    | Demo data: league, clubs, 8 teams × 15 players, users, 5 matches   |
 | `pnpm --filter @cricket/web test:e2e`                                           | Playwright at 375 px against the local stack (codes via Mailpit)   |
 | `pnpm format`                                                                   | Prettier write                                                     |
 
@@ -118,8 +118,6 @@ databases (`cricket_test_db`, `cricket_test_web`). Seeded logins: `admin@`, `lea
   `next typegen` first, so a clean checkout typechecks.
 - **MinIO** images are gone from Docker Hub; local S3 is RustFS (ADR-0010).
 - `next dev` rewrites `apps/web/AGENTS.md`; commit it as-is rather than editing it.
-- Two engines exist until Phase 3: the legacy one in `apps/web/lib/cricket` (used by the
-  current UI) and the new `@cricket/scoring-engine`. Don't mix them (ADR-0002).
 - **Run Prettier from the repo root.** Inside a package it ignores the root `.prettierignore`
   and reformats the minified Cricsheet fixtures.
 - **Vitest 5 changed `bench`** (fixture-based); the engine benchmark is `tools/bench.ts` (tsx).
@@ -142,3 +140,11 @@ databases (`cricket_test_db`, `cricket_test_web`). Seeded logins: `admin@`, `lea
 - Server Actions accept 5 MB bodies (image uploads); Vercel caps requests at 4.5 MB, so uploads
   are limited to 4 MB.
 - "Better Auth … Error: aborted" in dev logs is a client that navigated away mid-request; harmless.
+- **Scoring writes go through `POST /api/matches/:id/events`** (`features/scoring/service.ts`),
+  never straight into `ball_events`: a trigger blocks UPDATE and DELETE (`resetDatabase` truncates,
+  which is allowed). The route requires a same-origin `Origin` header.
+- **`DELIVERY.runs` counts runs completed**, not the boundary: a four is
+  `{ runs: 0, boundary: "FOUR" }`. An innings closes on the last legal ball of its final over,
+  with no `END_OF_OVER`.
+- **JSONB reorders object keys.** Compare stored JSON structurally, never with `JSON.stringify`.
+- `simulateNext` (`features/scoring/simulate.ts`) generates valid matches for demos and tests.

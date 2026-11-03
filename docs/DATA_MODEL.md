@@ -121,7 +121,14 @@ erDiagram
 | `venues`           | `name`, `address`, `geo point?`, `organization_id?` (null = public venue)                             |
 | `media_assets`     | `owner_type`, `owner_id`, `key`, `mime`, `bytes`, `status`                                            |
 
-### Matches & scoring — Phase 3
+### Matches & scoring — Phase 3 (built; ADR-0017)
+
+As built in migration 0003: `matches` has no `tournament_id` yet (Phase 6) and adds `preset`,
+`summary` (the list projection: innings scores and a status line), `started_at`, `completed_at`
+and a `CANCELLED` status. `match_players` adds `name` (the public-safe name written into events)
+and `position` (batting order). `match_officials` holds umpires and the referee only; scorers are
+`SCORER` role assignments on the `MATCH` scope. `match_state_snapshots` keeps one row per match
+(PK `match_id`). `scoring_locks` and `commentary_overrides` come in Phases 4 and 5.
 
 | Table                   | Key columns / constraints                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |

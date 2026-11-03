@@ -3,9 +3,9 @@
 Ball-by-ball cricket scoring, live scores, player careers and league management in one platform.
 Offline-first scorer PWA, real-time fan experience, multi-tenant league websites.
 
-> Status: **Phase 2 complete**: scoring engine, passwordless sign-in, permissions, leagues, clubs,
-> teams, player profiles, invitations and uploads. The earlier local-first scorer lives at
-> `/local` until Phase 3 brings server-backed matches.
+> Status: **Phase 3 complete**: scoring engine, passwordless sign-in, permissions, leagues, clubs,
+> teams, player profiles, invitations, uploads, match setup, the online scorer pad and live match
+> pages. Next: real-time updates and offline scoring (Phase 4).
 
 ## Quick start
 

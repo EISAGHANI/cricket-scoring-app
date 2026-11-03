@@ -151,18 +151,18 @@ mutation writes `audit_log`.
 | Redis         | Managed (Upstash / Railway)                             | self-hosted                      |
 | Storage       | Cloudflare R2                                           | any S3                           |
 
-## 8. Where we are (end of Phase 2)
+## 8. Where we are (end of Phase 3)
 
-| Path                       | State                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `apps/web`                 | Sign-in, accounts, leagues, clubs, teams, squads, players, claims, invitations, uploads; legacy scorer at `/local` |
-| `apps/realtime`            | Skeleton: env validation + `/healthz`                                                                              |
-| `apps/worker`              | Skeleton: env validation + `/healthz`                                                                              |
-| `packages/scoring-engine`  | **Done**: reducer, replay, undo/corrections, all spec rules, metrics, CLI (100% covered)                           |
-| `packages/schemas`         | Zod event/rules/result schemas, type-locked to the engine                                                          |
-| `packages/db`              | Drizzle schema + migrations (Phase 2 tables), test-database helpers                                                |
-| `packages/authz`           | Pure permission policy (`can`) and player privacy rules, 100% covered                                              |
-| `packages/ui`              | Empty — Phase 3+                                                                                                   |
-| `packages/config`          | Shared tsconfig bases + ESLint flat config                                                                         |
-| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit                                                       |
-| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                                                              |
+| Path                       | State                                                                                      |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `apps/web`                 | Phase 2 plus match setup, the event API, the scorer pad, live match pages (polling), lists |
+| `apps/realtime`            | Skeleton: env validation + `/healthz`                                                      |
+| `apps/worker`              | Skeleton: env validation + `/healthz`                                                      |
+| `packages/scoring-engine`  | **Done**: reducer, replay, undo/corrections, all spec rules, metrics, CLI (100% covered)   |
+| `packages/schemas`         | Zod event/rules/result schemas, type-locked to the engine                                  |
+| `packages/db`              | Drizzle schema + migrations (through matches and the event log), test-database helpers     |
+| `packages/authz`           | Pure permission policy (`can`) and player privacy rules, 100% covered                      |
+| `packages/ui`              | Empty — Phase 3+                                                                           |
+| `packages/config`          | Shared tsconfig bases + ESLint flat config                                                 |
+| `infra/`                   | docker-compose: Postgres 18, Redis 8.8, RustFS (S3), Mailpit                               |
+| `.github/workflows/ci.yml` | format, lint, typecheck, test, engine coverage, build                                      |
