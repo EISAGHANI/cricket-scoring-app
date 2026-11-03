@@ -1,0 +1,171 @@
+import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./session";
+
+/** Next.js keeps previously visited routes in the DOM (hidden); only match visible fields. */
+const field = (page: Page, label: string | RegExp) =>
+	page.getByLabel(label).filter({ visible: true });
+const button = (page: Page, name: string | RegExp) =>
+	page.getByRole("button", { name, exact: typeof name === "string" });
+
+async function createTeam(page: Page, name: string, shortName: string) {
+	await page.goto("/teams/new");
+	await field(page, "Team name").fill(name);
+	await field(page, "Short name").fill(shortName);
+	await button(page, "Create team").click();
+	await expect(page.getByRole("heading", { name: new RegExp(name) })).toBeVisible();
+}
+
+async function addGuests(page: Page, names: string[]) {
+	for (const name of names) {
+		await field(page, "Add a guest player").fill(name);
+		await page.getByRole("button", { name: "Add", exact: true }).click();
+		await expect(page.getByRole("button", { name: new RegExp(name) }).first()).toBeVisible();
+	}
+	await page.getByRole("button", { name: `Captain: ${names[0]}` }).click();
+	await page.getByRole("button", { name: `Wicket-keeper: ${names[1]}` }).click();
+	await expect(page.getByText(`${names.length}/${names.length} picked`)).toBeVisible();
+}
+
+test("set up a match, score it to a result, and a second browser follows it live", async ({
+	page,
+	browser,
+}) => {
+	test.setTimeout(120_000);
+	const s = Date.now().toString(36);
+	await signIn(page, "scorer");
+	await createTeam(page, `Lions ${s}`, "LIO");
+	await createTeam(page, `Tigers ${s}`, "TIG");
+
+	// M3: the setup wizard (two a side, one over, guest players).
+	await page.goto("/matches/new");
+	await field(page, /Your team/).selectOption({ label: `Lions ${s}` });
+	await field(page, /Opponent/).selectOption({ label: `Tigers ${s}` });
+	await button(page, "Next").click();
+	await page.getByRole("button", { name: /Custom/ }).click();
+	await field(page, "Overs per side").fill("1");
+	await field(page, "Players per side").fill("2");
+	await button(page, "Next").click();
+	await addGuests(page, [`Ann ${s}`, `Bea ${s}`]);
+	await button(page, "Next").click();
+	await addGuests(page, [`Dan ${s}`, `Eve ${s}`]);
+	await button(page, "Next").click();
+	await field(page, "Umpire 1").fill("Dickie Bird");
+	await button(page, "Create match").click();
+	await expect(page).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+	const matchUrl = page.url();
+	await expect(page.getByRole("heading", { name: `Lions ${s} v Tigers ${s}` })).toBeVisible();
+	await expect(page.getByText("Dickie Bird")).toBeVisible();
+
+	// A signed-out viewer opens the match page before play starts.
+	const viewer = await browser.newPage({ viewport: { width: 375, height: 800 } });
+	await viewer.goto(matchUrl);
+	await expect(viewer.getByText(/Waiting for the first ball/)).toBeVisible();
+	await expect(viewer.getByRole("link", { name: "Score" })).toHaveCount(0);
+
+	// M4: the scorer pad.
+	await page.getByRole("link", { name: "Score" }).click();
+	await button(page, "Start scoring").click();
+	await page.getByRole("button", { name: `Lions ${s}` }).click();
+	await button(page, "Record toss").click();
+	await expect(page.getByRole("heading", { name: `Lions ${s} to bat` })).toBeVisible();
+	await page.getByRole("button", { name: `Dan ${s}` }).click();
+	await button(page, "Start innings").click();
+
+	await button(page, "Four").click();
+	await button(page, "1 run").click();
+	await button(page, "Wide").click();
+	await page.getByRole("button", { name: /^Wd 1 run/ }).click();
+	await button(page, "2 runs").click();
+	const score = page.getByRole("region", { name: "Score" });
+	await expect(score).toContainText("8/0");
+	await button(page, "Undo last entry").click();
+	await expect(score).toContainText("6/0");
+	await expect(page.getByText("Saved")).toBeVisible();
+
+	// The viewer's page picks the balls up by polling.
+	await expect(viewer.getByRole("region", { name: "Score" })).toContainText("6/0", {
+		timeout: 15_000,
+	});
+
+	// A wicket with two a side ends the innings.
+	await button(page, "Out").click();
+	await button(page, "Record wicket").click();
+	await expect(page.getByText("Innings break")).toBeVisible();
+	await expect(page.getByRole("heading", { name: `Tigers ${s} to bat` })).toBeVisible();
+	await page
+		.getByRole("button", { name: `Ann ${s}` })
+		.last()
+		.click();
+	await button(page, "Start innings").click();
+	await expect(score).toContainText("Need 7 runs from 6 balls");
+	await button(page, "Six").click();
+	await button(page, "1 run").click();
+	await expect(page.getByRole("heading", { name: /Tigers .* won by 1 wicket/ })).toBeVisible();
+	await button(page, "Confirm result").click();
+	await expect(page.getByText(/won by 1 wicket \(4 balls left\)/)).toBeVisible();
+	await expect(page.getByText("Saved")).toBeVisible();
+
+	// The scorecard tab.
+	await page.getByRole("radio", { name: "Scorecard" }).click();
+	await expect(page.getByRole("table").first()).toContainText(`Ann ${s}`);
+	await expect(page.getByText(/b Dan/).first()).toBeVisible();
+
+	// M5: the viewer sees the result, the scorecard and the commentary.
+	await expect(viewer.getByText(/won by 1 wicket/).first()).toBeVisible({ timeout: 15_000 });
+	await viewer.getByRole("radio", { name: "Commentary" }).click();
+	await expect(viewer.getByRole("list", { name: "Ball by ball commentary" })).toContainText(
+		"FOUR!",
+	);
+	await expect(viewer.getByRole("list", { name: "Ball by ball commentary" })).toContainText("SIX!");
+
+	// Lists: the match is under recent results.
+	await viewer.goto("/matches");
+	await expect(
+		viewer.getByRole("link", { name: new RegExp(`Lions ${s}.*Tigers ${s}`) }),
+	).toBeVisible();
+	await viewer.close();
+});
+
+test("only the match's scorers can score", async ({ page }) => {
+	const s = Date.now().toString(36);
+	await signIn(page, "owner");
+	await createTeam(page, `Hawks ${s}`, "HAW");
+	await createTeam(page, `Owls ${s}`, "OWL");
+	await page.goto("/matches/new");
+	await field(page, /Your team/).selectOption({ label: `Hawks ${s}` });
+	await field(page, /Opponent/).selectOption({ label: `Owls ${s}` });
+	await button(page, "Next").click();
+	await page.getByRole("button", { name: /Custom/ }).click();
+	await field(page, "Players per side").fill("2");
+	await button(page, "Next").click();
+	await addGuests(page, [`Ho ${s}`, `Hu ${s}`]);
+	await button(page, "Next").click();
+	await addGuests(page, [`Oa ${s}`, `Ob ${s}`]);
+	await button(page, "Next").click();
+	await button(page, "Create match").click();
+	await expect(page).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+	const scoreUrl = `${page.url()}/score`;
+
+	await page.context().clearCookies();
+	await signIn(page, "stranger");
+	await page.goto(scoreUrl);
+	await expect(page.getByText(/Only the match's creator and the scorers/)).toBeVisible();
+	// The API refuses a well-formed event from a non-scorer, and any cross-origin request.
+	const matchId = scoreUrl.split("/").at(-2)!;
+	const api = `/api/matches/${matchId}/events`;
+	const data = {
+		matchId,
+		event: { id: crypto.randomUUID(), seq: 1, type: "SWAP_STRIKE", payload: { reason: "x" } },
+		deviceId: "e2e",
+		clientTimestamp: new Date().toISOString(),
+		schemaVersion: 1,
+	};
+	const origin = new URL(scoreUrl).origin;
+	const forbidden = await page.request.post(api, { headers: { Origin: origin }, data });
+	expect(forbidden.status()).toBe(403);
+	const cross = await page.request.post(api, { headers: { Origin: "https://evil.example" }, data });
+	expect(cross.status()).toBe(403);
+	expect(await cross.json()).toMatchObject({ error: "Cross-origin request" });
+	const events = await page.request.get(`${api}?after=0`);
+	expect(await events.json()).toMatchObject({ lastSeq: 0, events: [] });
+});
