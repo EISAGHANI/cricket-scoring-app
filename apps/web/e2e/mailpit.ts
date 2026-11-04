@@ -29,9 +29,12 @@ export async function latestMessage(
 
 const CODE = /\b(\d{6})\b/;
 
-/** The most recent sign-in code sent to `to` (email or dev SMS). */
-export async function codeFor(to: string): Promise<string> {
-	const m = await latestMessage(to, (msg) => CODE.test(`${msg.Subject} ${msg.Snippet}`));
+/** The most recent sign-in code sent to `to` (email or dev SMS), optionally not `stale`. */
+export async function codeFor(to: string, stale?: string): Promise<string> {
+	const m = await latestMessage(to, (msg) => {
+		const code = CODE.exec(`${msg.Subject} ${msg.Snippet}`)?.[1];
+		return code !== undefined && code !== stale;
+	});
 	return CODE.exec(`${m.Subject} ${m.Snippet}`)![1]!;
 }
 

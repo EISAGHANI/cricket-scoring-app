@@ -11,7 +11,7 @@ import {
 	type MatchEvent,
 	type MatchStartedEvent,
 } from "@cricket/scoring-engine";
-import { Check, CloudOff, Loader2, RotateCw, Type, X, Crosshair } from "lucide-react";
+import { Check, CloudOff, Loader2, Lock, Repeat, RotateCw, Type, X, Crosshair } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useStore } from "zustand";
 import { Button, Card, LinkButton, Segmented, cx } from "@/components/ui";
@@ -31,6 +31,7 @@ import {
 import { Scorecard } from "./scorecard-table";
 import { canUndo, createScoringStore, deviceId, httpTransport, type SyncStatus } from "./store";
 import { createOutbox, outboxAvailable, type OutboxPort } from "./outbox";
+import { LOCK_TTL_MS } from "./lock-constants";
 
 type Flash = { text: string; color: string; key: number } | null;
 
@@ -160,6 +161,7 @@ function Pad({
 	const queued = useStore(store, (s) => s.queue.length);
 	const message = useStore(store, (s) => s.message);
 	const lastApplied = useStore(store, (s) => s.lastApplied);
+	const lock = useStore(store, (s) => s.lock);
 	const { record: recordEvent, undo, retry, dismiss, pull } = store.getState();
 
 	const [tab, setTab] = useState<"score" | "scorecard">("score");
@@ -200,6 +202,19 @@ function Pad({
 			store.getState().stop();
 		};
 	}, [pull, retry, store]);
+
+	// Keep the lease alive while holding the lock; follow the other scorer while read-only.
+	useEffect(() => {
+		const id = setInterval(
+			() => {
+				const s = store.getState();
+				if (s.lock === "held") void s.heartbeat();
+				else void s.pull();
+			},
+			lock === "held" ? LOCK_TTL_MS / 3 : 5000,
+		);
+		return () => clearInterval(id);
+	}, [store, lock]);
 
 	const inn = currentInnings(state);
 	const undoable = canUndo(log);
@@ -293,8 +308,31 @@ function Pad({
 	return (
 		<div className={cx("mx-auto max-w-3xl", large && "scorer-large")}>
 			<div className="mb-4 flex flex-wrap items-center gap-2">
-				<SyncChip sync={sync} queued={queued} onRetry={retry} />
+				<SyncChip sync={sync} queued={queued} lock={lock} onRetry={retry} />
 				<div className="flex-1" />
+				{lock === "held" ? (
+					<ToggleChip
+						on={false}
+						onClick={() => void store.getState().releaseLock()}
+						label="Hand over"
+						icon={<Repeat className="size-4" aria-hidden="true" />}
+					/>
+				) : (
+					<>
+						<ToggleChip
+							on
+							onClick={() => void store.getState().requestLock()}
+							label="Take the lock"
+							icon={<Lock className="size-4" aria-hidden="true" />}
+						/>
+						<ToggleChip
+							on={false}
+							onClick={() => void store.getState().requestLock("Taken over from the scorer screen")}
+							label="Take over"
+							icon={<Lock className="size-4" aria-hidden="true" />}
+						/>
+					</>
+				)}
 				<ToggleChip
 					on={detail}
 					onClick={() => setDetail(!detail)}
@@ -362,12 +400,24 @@ function Pad({
 function SyncChip({
 	sync,
 	queued,
+	lock,
 	onRetry,
 }: {
 	sync: SyncStatus;
 	queued: number;
+	lock: "held" | "lost";
 	onRetry: () => void;
 }) {
+	if (lock === "lost")
+		return (
+			<span
+				role="status"
+				className="inline-flex items-center gap-1.5 rounded-full bg-wicket/10 px-3 py-1 text-xs font-semibold text-wicket"
+			>
+				<Lock className="size-3.5" aria-hidden="true" /> Read-only
+				{queued > 0 && ` · ${queued} pending`}
+			</span>
+		);
 	if (sync === "saving")
 		return (
 			<span

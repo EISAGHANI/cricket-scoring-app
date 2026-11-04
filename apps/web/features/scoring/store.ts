@@ -38,6 +38,19 @@ export interface Transport {
 	postBatch?(events: MatchEvent[]): Promise<{ acked: number; failure: PostFailure | null }>;
 	/** All events after `after`, following pagination. */
 	fetchAfter(after: number): Promise<MatchEvent[]>;
+	/** The scoring lock (PHASE_4_PLAN.md §3). Absent in transports that don't need one. */
+	lock?: LockClient;
+}
+
+export type LockResult = { ok: true } | ({ ok: false } & PostFailure);
+
+export interface LockClient {
+	/** Renew the lease; a no-op until the lock has been taken. */
+	heartbeat(): Promise<LockResult>;
+	acquire(): Promise<LockResult>;
+	/** The manager's takeover of a lock held by someone else. */
+	takeOver(reason: string): Promise<LockResult>;
+	release(): Promise<void>;
 }
 
 export interface StoreOptions {
@@ -74,9 +87,17 @@ export interface ScoringState {
 	message: string | null;
 	/** The latest event applied by this device (drives the "Four!" flash). */
 	lastApplied: MatchEvent | null;
+	/** "lost": another device holds the scoring lock, so this pad is read-only. */
+	lock: "held" | "lost";
 	record(type: MatchEventType, payload: unknown): boolean;
 	undo(): void;
 	retry(): void;
+	/** Renew the lease (called on a timer); flips to read-only if it was lost. */
+	heartbeat(): Promise<void>;
+	/** Ask for the lock back (`takeOverReason`: a manager taking it from someone else). */
+	requestLock(takeOverReason?: string): Promise<void>;
+	/** Give the lock up so another scorer can take it. */
+	releaseLock(): Promise<void>;
 	dismiss(): void;
 	/** Stop retry timers (the scorer screen unmounted). */
 	stop(): void;
@@ -87,6 +108,7 @@ export interface ScoringState {
 export type ScoringStore = StoreApi<ScoringState>;
 
 const head = (log: readonly MatchEvent[]) => log.at(-1)?.seq ?? 0;
+const READ_ONLY = "Another device is scoring this match. This screen is read-only.";
 
 export function createScoringStore(
 	initial: MatchEvent[],
@@ -109,6 +131,10 @@ export function createScoringStore(
 	const store = createStore<ScoringState>()((set, get) => {
 		/** `track`: the scorer's own tap (shown as "last applied"), not an automatic follow-up. */
 		function apply(type: MatchEventType, payload: unknown, track = true): boolean {
+			if (get().lock === "lost") {
+				set({ message: READ_ONLY });
+				return false;
+			}
 			const { log, state } = get();
 			const event = { id: uuidv7(), seq: head(log) + 1, type, payload } as MatchEvent;
 			try {
@@ -149,7 +175,7 @@ export function createScoringStore(
 		}
 
 		async function flush() {
-			if (flushing) return;
+			if (flushing || get().lock === "lost") return;
 			flushing = true;
 			try {
 				while (get().queue.length > 0) {
@@ -176,6 +202,11 @@ export function createScoringStore(
 							},
 							backoffMs(attempts++, options.random),
 						);
+						return;
+					}
+					if (result.status === 423) {
+						// Someone else holds the lock: keep the unsent entries and go read-only.
+						set({ sync: "error", lock: "lost", message: READ_ONLY });
 						return;
 					}
 					if (result.status === 401 || result.status === 403) {
@@ -210,6 +241,44 @@ export function createScoringStore(
 					? `${recovery.dropped.length} unsaved entr${recovery.dropped.length === 1 ? "y" : "ies"} from before no longer fit the match and ${recovery.dropped.length === 1 ? "was" : "were"} discarded.`
 					: null,
 			lastApplied: null,
+			lock: "held",
+
+			async heartbeat() {
+				const result = await transport.lock?.heartbeat();
+				if (result !== undefined && !result.ok && result.status === 423) {
+					set({ lock: "lost", message: READ_ONLY });
+				}
+			},
+
+			async requestLock(takeOverReason) {
+				const client = transport.lock;
+				if (client === undefined) return;
+				const result = await (takeOverReason === undefined
+					? client.acquire()
+					: client.takeOver(takeOverReason));
+				if (!result.ok) {
+					set({
+						message:
+							result.status === 423
+								? "Another scorer still holds the lock."
+								: result.status === 0
+									? "No connection. Try again when you're back online."
+									: result.error,
+					});
+					return;
+				}
+				set({ lock: "held", message: null, sync: "synced" });
+				// Anything scored elsewhere meanwhile wins; otherwise our unsent entries go up now.
+				if (get().queue.length > 0) void flush();
+				else await get().pull();
+			},
+
+			async releaseLock() {
+				if (get().queue.length > 0) await flush();
+				if (get().queue.length > 0) return;
+				await transport.lock?.release();
+				set({ lock: "lost", message: null });
+			},
 
 			record(type, payload) {
 				if (!apply(type, payload)) return false;
@@ -286,18 +355,19 @@ export function httpTransport(matchId: string, deviceId: string): Transport {
 	let generation: number | undefined;
 	const json = { "Content-Type": "application/json" };
 
-	async function acquire(): Promise<
-		{ ok: true } | { ok: false; status: number; code: string; error: string }
-	> {
+	async function lockCall(
+		action: string,
+		extra: Record<string, unknown> = {},
+	): Promise<{ ok: true } | ({ ok: false } & PostFailure)> {
 		try {
 			const res = await fetch(`/api/matches/${matchId}/lock`, {
 				method: "POST",
 				headers: json,
-				body: JSON.stringify({ action: "acquire", deviceId }),
+				body: JSON.stringify({ action, deviceId, ...extra }),
 			});
 			const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 			if (res.ok) {
-				generation = Number(body.generation);
+				if (action !== "release") generation = Number(body.generation);
 				return { ok: true };
 			}
 			return {
@@ -310,6 +380,19 @@ export function httpTransport(matchId: string, deviceId: string): Transport {
 			return { ok: false, status: 0, code: "NETWORK", error: "Network error" };
 		}
 	}
+	const acquire = () => lockCall("acquire");
+
+	const lock: LockClient = {
+		heartbeat() {
+			return generation === undefined ? Promise.resolve({ ok: true }) : lockCall("heartbeat");
+		},
+		acquire,
+		takeOver: (reason) => lockCall("takeover", { reason }),
+		async release() {
+			await lockCall("release");
+			generation = undefined;
+		},
+	};
 
 	const submission = (event: MatchEvent) => ({
 		matchId,
@@ -337,6 +420,7 @@ export function httpTransport(matchId: string, deviceId: string): Transport {
 	}
 
 	return {
+		lock,
 		async postBatch(events) {
 			try {
 				if (generation === undefined) {

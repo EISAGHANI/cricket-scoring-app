@@ -13,11 +13,11 @@ import { audit } from "@/lib/services/audit";
 import { notFound } from "@/lib/services/errors";
 import { parse } from "@/lib/services/result";
 import { ScoringError, type LockView } from "./errors";
+import { LOCK_TTL_MS } from "./lock-constants";
 
 const { matches, matchScoringLocks } = schema;
 
-/** A lease lasts this long without a heartbeat. Clients renew every LOCK_TTL_MS / 3. */
-export const LOCK_TTL_MS = 60_000;
+export { LOCK_TTL_MS };
 
 type Row = typeof matchScoringLocks.$inferSelect;
 type Tx = Executor;

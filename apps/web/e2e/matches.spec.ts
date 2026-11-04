@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { signIn } from "./session";
+import { codeFor } from "./mailpit";
+import { signIn, signInAs } from "./session";
 
 /** Next.js keeps previously visited routes in the DOM (hidden); only match visible fields. */
 const field = (page: Page, label: string | RegExp) =>
@@ -32,7 +33,7 @@ test("set up a match, score it to a result, and a second browser follows it live
 }) => {
 	test.setTimeout(120_000);
 	const s = Date.now().toString(36);
-	await signIn(page, "scorer");
+	const scorerEmail = await signIn(page, "scorer");
 	await createTeam(page, `Lions ${s}`, "LIO");
 	await createTeam(page, `Tigers ${s}`, "TIG");
 
@@ -77,8 +78,28 @@ test("set up a match, score it to a result, and a second browser follows it live
 	await expect(page.getByRole("heading", { name: `Lions ${s} to bat` })).toBeVisible();
 	await page.getByRole("button", { name: `Dan ${s}` }).click();
 	await button(page, "Start innings").click();
+	await expect(page.getByText("Saved")).toBeVisible();
 
-	await button(page, "Four").click();
+	// M6: a second device of the same scorer. It can't score while the first holds the lock, and
+	// goes read-only; the first hands over, the second scores and its pending entry is saved.
+	const scorerUrl = page.url();
+	const second = await browser.newPage({ viewport: { width: 375, height: 800 } });
+	await second.goto("/sign-in");
+	await signInAs(second, scorerEmail, /\/me$/, await codeFor(scorerEmail));
+	await second.goto(scorerUrl);
+	await button(second, "Four").click();
+	await expect(second.getByText(/Read-only · 1 pending/)).toBeVisible();
+	await button(page, "Hand over").click();
+	await expect(page.getByText("Read-only")).toBeVisible();
+	await button(second, "Take the lock").click();
+	await expect(second.getByText("Saved")).toBeVisible();
+	await expect(page.getByRole("region", { name: "Score" })).toContainText("4/0", {
+		timeout: 15_000,
+	});
+	await button(second, "Hand over").click();
+	await button(page, "Take the lock").click();
+	await expect(page.getByText("Saved")).toBeVisible();
+	await second.close();
 	await button(page, "1 run").click();
 	await button(page, "Wide").click();
 	await page.getByRole("button", { name: /^Wd 1 run/ }).click();

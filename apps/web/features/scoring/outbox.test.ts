@@ -123,6 +123,73 @@ function batchServer() {
 	return { server, transport };
 }
 
+describe("scoring lock", () => {
+	function lockedServer() {
+		const { server, transport } = batchServer();
+		const state = { holder: "me" as "me" | "other", heartbeats: 0, released: false };
+		const denied = { ok: false as const, status: 423, code: "LOCKED", error: "held" };
+		const post = transport.postBatch!;
+		transport.postBatch = async (events) =>
+			state.holder === "other"
+				? { acked: 0, failure: { status: 423, code: "LOCK_LOST", error: "held" } }
+				: post(events);
+		transport.lock = {
+			async heartbeat() {
+				state.heartbeats++;
+				return state.holder === "me" ? { ok: true } : { ...denied, code: "LOCK_LOST" };
+			},
+			async acquire() {
+				if (state.holder === "other") return denied;
+				return { ok: true };
+			},
+			async takeOver() {
+				state.holder = "me";
+				return { ok: true };
+			},
+			async release() {
+				state.released = true;
+			},
+		};
+		return { server, transport, state };
+	}
+
+	it("goes read-only when the lock is lost, keeping unsent entries, and resumes after taking it back", async () => {
+		const { server, transport, state } = lockedServer();
+		const store = createScoringStore([...opening], transport);
+		state.holder = "other";
+		store.getState().record("DELIVERY", ball(1));
+		await settle();
+		expect(store.getState().lock).toBe("lost");
+		expect(store.getState().queue).toHaveLength(1);
+		expect(store.getState().record("DELIVERY", ball(1))).toBe(false);
+		expect(store.getState().message).toMatch(/read-only/);
+
+		await store.getState().requestLock();
+		expect(store.getState().lock).toBe("lost"); // still held by the other device
+
+		await store.getState().requestLock("manager override");
+		await settle();
+		expect(store.getState().lock).toBe("held");
+		expect(server.events.map((e) => e.seq)).toEqual([1, 2, 3, 4]);
+	});
+
+	it("a failed heartbeat makes the pad read-only; releasing hands the lock over", async () => {
+		const { transport, state } = lockedServer();
+		const store = createScoringStore([...opening], transport);
+		await store.getState().heartbeat();
+		expect(store.getState().lock).toBe("held");
+		state.holder = "other";
+		await store.getState().heartbeat();
+		expect(store.getState().lock).toBe("lost");
+
+		state.holder = "me";
+		await store.getState().requestLock();
+		await store.getState().releaseLock();
+		expect(state.released).toBe(true);
+		expect(store.getState().lock).toBe("lost");
+	});
+});
+
 describe("offline scoring", () => {
 	it("persists taps while offline, retries with backoff, uploads one ordered batch and empties the outbox", async () => {
 		const { server, transport } = batchServer();

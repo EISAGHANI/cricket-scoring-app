@@ -14,13 +14,15 @@ export async function signInAs(
 	page: Page,
 	email: string,
 	landing: RegExp = /\/me$/,
+	/** A code already used for this address, so a second sign-in waits for a fresh one. */
+	stale?: string,
 ): Promise<void> {
 	await page.getByLabel("Email address").filter({ visible: true }).fill(email);
 	await page.getByRole("button", { name: "Send me a code" }).click();
 	await page
 		.getByLabel("Code")
 		.filter({ visible: true })
-		.fill(await codeFor(email));
+		.fill(await codeFor(email, stale));
 	await page.getByRole("button", { name: "Sign in" }).click();
 	await expect(page).toHaveURL(landing);
 }
