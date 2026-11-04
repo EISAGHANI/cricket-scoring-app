@@ -30,6 +30,7 @@ import {
 } from "./panels";
 import { Scorecard } from "./scorecard-table";
 import { canUndo, createScoringStore, deviceId, httpTransport, type SyncStatus } from "./store";
+import { createOutbox, outboxAvailable, type OutboxPort } from "./outbox";
 
 type Flash = { text: string; color: string; key: number } | null;
 
@@ -104,17 +105,54 @@ function useWakeLock() {
 	}, []);
 }
 
-export function ScorerScreen({
-	matchId,
-	initialLog,
-	startPayload,
-}: {
+export function ScorerScreen(props: {
 	matchId: string;
 	initialLog: MatchEvent[];
 	startPayload: MatchStartedEvent["payload"] | null;
 }) {
+	const [boot, setBoot] = useState<{ outbox?: OutboxPort; recovered: MatchEvent[] } | null>(null);
+	// Read the durable outbox before building the store, so unsent entries survive a reload.
+	useEffect(() => {
+		let live = true;
+		void (async () => {
+			let outbox: OutboxPort | undefined;
+			let recovered: MatchEvent[] = [];
+			try {
+				if (await outboxAvailable()) {
+					outbox = createOutbox(props.matchId);
+					recovered = await outbox.unacked();
+				}
+			} catch {
+				outbox = undefined; // IndexedDB unavailable: online-only scoring still works.
+			}
+			if (live) setBoot({ ...(outbox ? { outbox } : {}), recovered });
+		})();
+		return () => {
+			live = false;
+		};
+	}, [props.matchId]);
+	if (boot === null) return <p className="p-6 text-sm text-muted">Loading the scorer…</p>;
+	return <Pad {...props} {...boot} />;
+}
+
+function Pad({
+	matchId,
+	initialLog,
+	startPayload,
+	outbox,
+	recovered,
+}: {
+	matchId: string;
+	initialLog: MatchEvent[];
+	startPayload: MatchStartedEvent["payload"] | null;
+	outbox?: OutboxPort;
+	recovered: MatchEvent[];
+}) {
 	const [store] = useState(() =>
-		createScoringStore(initialLog, httpTransport(matchId, deviceId())),
+		createScoringStore(initialLog, httpTransport(matchId, deviceId()), {
+			...(outbox ? { outbox } : {}),
+			recovered,
+		}),
 	);
 	const state = useStore(store, (s) => s.state);
 	const log = useStore(store, (s) => s.log);
@@ -155,8 +193,13 @@ export function ScorerScreen({
 			if (document.visibilityState === "visible") void pull();
 		};
 		document.addEventListener("visibilitychange", onVisible);
-		return () => document.removeEventListener("visibilitychange", onVisible);
-	}, [pull]);
+		window.addEventListener("online", retry);
+		return () => {
+			document.removeEventListener("visibilitychange", onVisible);
+			window.removeEventListener("online", retry);
+			store.getState().stop();
+		};
+	}, [pull, retry, store]);
 
 	const inn = currentInnings(state);
 	const undoable = canUndo(log);

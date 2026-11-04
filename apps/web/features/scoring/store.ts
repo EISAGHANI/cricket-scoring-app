@@ -16,20 +16,52 @@ import {
 } from "@cricket/scoring-engine";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { uuidv7 } from "@/lib/uuidv7";
+import type { OutboxPort } from "./outbox";
+import { backoffMs, recoverTail } from "./sync";
 
 export type SyncStatus = "synced" | "saving" | "offline" | "error";
 
+export type PostFailure =
+	| { status: number; code: string; error: string; lastSeq?: number }
+	| { status: 0; code: "NETWORK"; error: string };
+
+/** How many events one upload carries (the server accepts up to 500). */
+const BATCH = 100;
+
 /** How the store talks to the server (fetch in the app, a fake in tests). */
 export interface Transport {
-	post(
-		event: MatchEvent,
-	): Promise<
-		| { ok: true; lastSeq: number }
-		| { ok: false; status: number; code: string; error: string; lastSeq?: number }
-		| { ok: false; status: 0; code: "NETWORK"; error: string }
-	>;
+	post(event: MatchEvent): Promise<{ ok: true; lastSeq: number } | ({ ok: false } & PostFailure)>;
+	/**
+	 * Upload several events in order, stopping at the first rejection: how many the server
+	 * accepted, and why it stopped. Without it the store posts one event at a time.
+	 */
+	postBatch?(events: MatchEvent[]): Promise<{ acked: number; failure: PostFailure | null }>;
 	/** All events after `after`, following pagination. */
 	fetchAfter(after: number): Promise<MatchEvent[]>;
+}
+
+export interface StoreOptions {
+	/** Durable queue (IndexedDB). Without it the queue lives in memory only. */
+	outbox?: OutboxPort;
+	/** The unsent tail recovered from the outbox after a reload. */
+	recovered?: MatchEvent[];
+	/** Test seams for retry scheduling. */
+	schedule?: (run: () => void, ms: number) => () => void;
+	random?: () => number;
+}
+
+async function sendBatch(
+	transport: Transport,
+	events: MatchEvent[],
+): Promise<{ acked: number; failure: PostFailure | null }> {
+	if (transport.postBatch) return transport.postBatch(events);
+	let acked = 0;
+	for (const event of events) {
+		const result = await transport.post(event);
+		if (!result.ok) return { acked, failure: result };
+		acked++;
+	}
+	return { acked, failure: null };
 }
 
 export interface ScoringState {
@@ -46,6 +78,8 @@ export interface ScoringState {
 	undo(): void;
 	retry(): void;
 	dismiss(): void;
+	/** Stop retry timers (the scorer screen unmounted). */
+	stop(): void;
 	/** Fetch events recorded elsewhere (another scorer) and apply them. */
 	pull(): Promise<void>;
 }
@@ -54,8 +88,23 @@ export type ScoringStore = StoreApi<ScoringState>;
 
 const head = (log: readonly MatchEvent[]) => log.at(-1)?.seq ?? 0;
 
-export function createScoringStore(initial: MatchEvent[], transport: Transport): ScoringStore {
+export function createScoringStore(
+	initial: MatchEvent[],
+	transport: Transport,
+	options: StoreOptions = {},
+): ScoringStore {
+	const { outbox } = options;
+	const schedule =
+		options.schedule ??
+		((run, ms) => {
+			const id = setTimeout(run, ms);
+			return () => clearTimeout(id);
+		});
+	const recovery = recoverTail(initial, options.recovered ?? []);
 	let flushing = false;
+	let attempts = 0;
+	let cancelRetry: (() => void) | null = null;
+	const persist = (work: Promise<void> | undefined) => void work?.catch(() => undefined);
 
 	const store = createStore<ScoringState>()((set, get) => {
 		/** `track`: the scorer's own tap (shown as "last applied"), not an automatic follow-up. */
@@ -64,6 +113,7 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 			const event = { id: uuidv7(), seq: head(log) + 1, type, payload } as MatchEvent;
 			try {
 				const next = appendEvent(log, state, event);
+				persist(outbox?.add(event));
 				set((s) => ({
 					log: next.log,
 					state: next.state,
@@ -84,6 +134,7 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 		async function resync(reason: string | null) {
 			try {
 				const log = await transport.fetchAfter(0);
+				persist(outbox?.clear());
 				set({
 					log,
 					state: replay(log),
@@ -103,17 +154,28 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 			try {
 				while (get().queue.length > 0) {
 					set({ sync: "saving" });
-					const event = get().queue[0]!;
-					const result = await transport.post(event);
-					if (result.ok) {
-						set((s) => ({ queue: s.queue.slice(1) }));
-						continue;
+					const batch = get().queue.slice(0, BATCH);
+					const { acked, failure } = await sendBatch(transport, batch);
+					if (acked > 0) {
+						attempts = 0;
+						set((s) => ({ queue: s.queue.slice(acked) }));
+						persist(outbox?.ack(batch.slice(0, acked).map((e) => e.id)));
 					}
+					if (failure === null) continue;
+					const result = failure;
 					if (result.status === 0 || result.status >= 500) {
 						set({
 							sync: "offline",
-							message: "Not saved yet: no connection. Tap retry when you're back online.",
+							message: "Not saved yet: no connection. We'll keep trying.",
 						});
+						cancelRetry?.();
+						cancelRetry = schedule(
+							() => {
+								cancelRetry = null;
+								void flush();
+							},
+							backoffMs(attempts++, options.random),
+						);
 						return;
 					}
 					if (result.status === 401 || result.status === 403) {
@@ -139,11 +201,14 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 		}
 
 		return {
-			log: initial,
-			state: replay(initial),
-			queue: [],
+			log: recovery.log,
+			state: recovery.state,
+			queue: recovery.queue,
 			sync: "synced",
-			message: null,
+			message:
+				recovery.dropped.length > 0
+					? `${recovery.dropped.length} unsaved entr${recovery.dropped.length === 1 ? "y" : "ies"} from before no longer fit the match and ${recovery.dropped.length === 1 ? "was" : "were"} discarded.`
+					: null,
 			lastApplied: null,
 
 			record(type, payload) {
@@ -172,7 +237,14 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 
 			retry() {
 				set({ message: null });
+				cancelRetry?.();
+				cancelRetry = null;
 				void flush();
+			},
+
+			stop() {
+				cancelRetry?.();
+				cancelRetry = null;
 			},
 
 			dismiss() {
@@ -192,6 +264,9 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 			},
 		};
 	});
+	// Clean up the outbox after recovery, then upload whatever tail is left.
+	persist(outbox?.ack([...recovery.alreadySaved, ...recovery.dropped].map((e) => e.id)));
+	if (recovery.queue.length > 0) store.getState().retry();
 	return store;
 }
 
@@ -236,22 +311,75 @@ export function httpTransport(matchId: string, deviceId: string): Transport {
 		}
 	}
 
+	const submission = (event: MatchEvent) => ({
+		matchId,
+		event,
+		deviceId,
+		clientTimestamp: new Date().toISOString(),
+		schemaVersion: 1,
+		...(generation === undefined ? {} : { lockGeneration: generation }),
+	});
+
 	async function send(event: MatchEvent): Promise<Response> {
 		return fetch(url, {
 			method: "POST",
 			headers: json,
-			body: JSON.stringify({
-				matchId,
-				event,
-				deviceId,
-				clientTimestamp: new Date().toISOString(),
-				schemaVersion: 1,
-				...(generation === undefined ? {} : { lockGeneration: generation }),
-			}),
+			body: JSON.stringify(submission(event)),
+		});
+	}
+
+	async function sendMany(events: MatchEvent[]): Promise<Response> {
+		return fetch(url, {
+			method: "POST",
+			headers: json,
+			body: JSON.stringify({ submissions: events.map(submission) }),
 		});
 	}
 
 	return {
+		async postBatch(events) {
+			try {
+				if (generation === undefined) {
+					const lock = await acquire();
+					if (!lock.ok) return { acked: 0, failure: lock };
+				}
+				let res = await sendMany(events);
+				if (
+					res.status === 423 &&
+					(
+						await res
+							.clone()
+							.json()
+							.catch(() => ({}))
+					).code === "LOCK_REQUIRED"
+				) {
+					const lock = await acquire();
+					if (!lock.ok) return { acked: 0, failure: lock };
+					res = await sendMany(events);
+				}
+				const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+				if (!res.ok) {
+					return {
+						acked: 0,
+						failure: {
+							status: res.status,
+							code: String(body.code ?? "ERROR"),
+							error: String(body.error ?? res.statusText),
+						},
+					};
+				}
+				const accepted = (body.accepted as unknown[]).length;
+				const failed = body.failed as {
+					status: number;
+					code: string;
+					error: string;
+					lastSeq?: number;
+				} | null;
+				return { acked: accepted, failure: failed };
+			} catch {
+				return { acked: 0, failure: { status: 0, code: "NETWORK", error: "Network error" } };
+			}
+		},
 		async post(event) {
 			try {
 				if (generation === undefined) {
