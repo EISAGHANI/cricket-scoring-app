@@ -15,6 +15,7 @@ const nextConfig: NextConfig = {
 				headers: securityHeaders({
 					appUrl: env.NEXT_PUBLIC_APP_URL,
 					mediaUrl: env.S3_PUBLIC_URL,
+					realtimeUrl: env.NEXT_PUBLIC_REALTIME_URL,
 					dev: env.NODE_ENV === "development",
 				}),
 			},

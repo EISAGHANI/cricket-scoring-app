@@ -6,23 +6,32 @@
 export interface SecurityHeaderOptions {
 	appUrl: string;
 	mediaUrl: string | undefined;
+	/** The Socket.IO service; allowed for fetch and WebSocket connections. */
+	realtimeUrl?: string | undefined;
 	dev: boolean;
 }
 
 export function securityHeaders({
 	appUrl,
 	mediaUrl,
+	realtimeUrl,
 	dev,
 }: SecurityHeaderOptions): { key: string; value: string }[] {
 	const https = appUrl.startsWith("https://");
 	const media = mediaUrl === undefined ? "" : ` ${new URL(mediaUrl).origin}`;
+	const realtime =
+		realtimeUrl === undefined
+			? ""
+			: ((u) => ` ${u.origin} ${u.protocol === "https:" ? "wss" : "ws"}://${u.host}`)(
+					new URL(realtimeUrl),
+				);
 	const csp = [
 		"default-src 'self'",
 		`script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""}`,
 		"style-src 'self' 'unsafe-inline'",
 		`img-src 'self' blob: data:${media}`,
 		"font-src 'self'",
-		"connect-src 'self'",
+		`connect-src 'self'${realtime}`,
 		"object-src 'none'",
 		"base-uri 'self'",
 		"form-action 'self'",

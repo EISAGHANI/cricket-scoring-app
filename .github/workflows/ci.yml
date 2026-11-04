@@ -88,6 +88,12 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U cricket -d cricket"
           --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:8.8-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
       mailpit:
         image: axllent/mailpit:v1.33
         ports: ["1025:1025", "8025:8025"]
@@ -102,7 +108,9 @@ jobs:
       DATABASE_URL: postgres://cricket:cricket@localhost:5432/cricket
       BETTER_AUTH_SECRET: ci-only-secret-ci-only-secret-ci-only-0000
       SMTP_URL: smtp://localhost:1025
+      REDIS_URL: redis://localhost:6379
       NEXT_PUBLIC_APP_URL: http://localhost:3100
+      NEXT_PUBLIC_REALTIME_URL: http://localhost:4101
       AUTH_CODE_REQUESTS_PER_MINUTE: "1000"
       S3_ENDPOINT: http://localhost:9000
       S3_PUBLIC_URL: http://localhost:9000/cricket-media

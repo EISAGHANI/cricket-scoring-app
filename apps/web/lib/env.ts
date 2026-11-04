@@ -16,6 +16,8 @@ const optionalString = z
 const EnvSchema = z.object({
 	NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 	NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
+	/** The realtime service (apps/realtime). Unset: live pages poll instead. */
+	NEXT_PUBLIC_REALTIME_URL: z.url().optional(),
 
 	DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
 	/** Signs sessions and tokens. Generate with `openssl rand -base64 32`. */

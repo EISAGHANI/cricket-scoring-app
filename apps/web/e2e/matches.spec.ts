@@ -62,6 +62,13 @@ test("set up a match, score it to a result, and a second browser follows it live
 	await expect(viewer.getByText(/Waiting for the first ball/)).toBeVisible();
 	await expect(viewer.getByRole("link", { name: "Score" })).toHaveCount(0);
 
+	// A second viewer whose socket is blocked must fall back to polling.
+	const polled = await browser.newPage({ viewport: { width: 375, height: 800 } });
+	await polled.route("**/socket.io/**", (route) => route.abort());
+	await polled.routeWebSocket(/socket\.io/, (ws) => void ws.close());
+	await polled.goto(matchUrl);
+	await expect(polled.getByText(/Waiting for the first ball/)).toBeVisible();
+
 	// M4: the scorer pad.
 	await page.getByRole("link", { name: "Score" }).click();
 	await button(page, "Start scoring").click();
@@ -82,10 +89,17 @@ test("set up a match, score it to a result, and a second browser follows it live
 	await expect(score).toContainText("6/0");
 	await expect(page.getByText("Saved")).toBeVisible();
 
-	// The viewer's page picks the balls up by polling.
+	// The socket viewer sees the balls at once (well inside the 5 s poll interval); the one
+	// with a blocked socket catches up by polling.
 	await expect(viewer.getByRole("region", { name: "Score" })).toContainText("6/0", {
+		timeout: 3_000,
+	});
+	await expect(viewer.getByRole("status").filter({ hasText: /^Live$/ })).toBeVisible();
+	await expect(polled.getByRole("region", { name: "Score" })).toContainText("6/0", {
 		timeout: 15_000,
 	});
+	await expect(polled.getByText("Updates every few seconds")).toBeVisible();
+	await polled.close();
 
 	// A wicket with two a side ends the innings.
 	await button(page, "Out").click();

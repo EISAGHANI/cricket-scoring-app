@@ -24,6 +24,17 @@ describe("securityHeaders", () => {
 		expect(csp(h)).not.toContain("upgrade-insecure-requests");
 		expect(csp(h)).toContain("'unsafe-eval'");
 		expect(csp(h)).toContain("img-src 'self' blob: data:;");
+		expect(csp(h)).toContain("connect-src 'self';");
 		expect(h.map((x) => x.key)).not.toContain("Strict-Transport-Security");
+	});
+
+	it("allows the realtime origin over http and WebSocket", () => {
+		const h = securityHeaders({
+			appUrl: "http://localhost:3000",
+			mediaUrl: undefined,
+			realtimeUrl: "http://localhost:4001",
+			dev: false,
+		});
+		expect(csp(h)).toContain("connect-src 'self' http://localhost:4001 ws://localhost:4001;");
 	});
 });

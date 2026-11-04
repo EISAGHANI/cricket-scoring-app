@@ -1,50 +1,12 @@
 "use client";
 
 import { currentInnings, format, replay, type MatchEvent } from "@cricket/scoring-engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, Segmented, cx } from "@/components/ui";
 import { commentary, type CommentaryLine } from "@/features/scoring/commentary";
 import { CreaseCard, OverStrip, ScoreHeader } from "@/features/scoring/display";
 import { Scorecard } from "@/features/scoring/scorecard-table";
-
-/** Poll interval until Phase 4 replaces polling with sockets (PHASE_3_PLAN Q4). */
-const POLL_MS = 5000;
-
-function useLiveLog(matchId: string, initial: MatchEvent[], active: boolean): MatchEvent[] {
-	const [log, setLog] = useState(initial);
-	const head = useRef(initial.at(-1)?.seq ?? 0);
-	useEffect(() => {
-		if (!active) return;
-		let stopped = false;
-		let timer: ReturnType<typeof setTimeout>;
-		const tick = async () => {
-			if (document.visibilityState === "visible") {
-				try {
-					const res = await fetch(`/api/matches/${matchId}/events?after=${head.current}`, {
-						cache: "no-store",
-					});
-					if (res.ok) {
-						const page = (await res.json()) as { events: MatchEvent[] };
-						const fresh = page.events.filter((e) => e.seq > head.current);
-						if (!stopped && fresh.length > 0) {
-							head.current = fresh.at(-1)!.seq;
-							setLog((l) => [...l, ...fresh]);
-						}
-					}
-				} catch {
-					// Offline: try again on the next tick.
-				}
-			}
-			if (!stopped) timer = setTimeout(() => void tick(), POLL_MS);
-		};
-		timer = setTimeout(() => void tick(), POLL_MS);
-		return () => {
-			stopped = true;
-			clearTimeout(timer);
-		};
-	}, [matchId, active]);
-	return log;
-}
+import { useLiveLog } from "./use-live-log";
 
 export function LiveMatch({
 	matchId,
@@ -55,7 +17,7 @@ export function LiveMatch({
 	initialLog: MatchEvent[];
 	live: boolean;
 }) {
-	const log = useLiveLog(matchId, initialLog, live);
+	const { log, connection } = useLiveLog(matchId, initialLog, live);
 	const state = useMemo(() => replay(log), [log]);
 	const lines = useMemo(() => commentary(log), [log]);
 	const [tab, setTab] = useState<"live" | "scorecard" | "commentary">("live");
@@ -119,7 +81,7 @@ export function LiveMatch({
 			{tab === "commentary" && <CommentaryList lines={lines} />}
 			{live && state.status === "IN_PROGRESS" && (
 				<p className="text-center text-xs text-muted" role="status">
-					Updates every few seconds
+					{connection === "socket" ? "Live" : "Updates every few seconds"}
 				</p>
 			)}
 		</div>
