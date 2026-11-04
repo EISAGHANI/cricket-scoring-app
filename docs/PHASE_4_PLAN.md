@@ -100,6 +100,17 @@ and handoff, sync status UI. E2E: score an innings while toggling the network of
 Second-scorer comparison (Q4), `CORRECTION` UI, push notifications and worker projections
 (later phases), rate limiting on the scoring API (Phase 8), and the overlay page.
 
+## Outcome (Phase 4 close-out)
+
+M1–M8 are done (decisions recorded as ADR-0018). Deferred:
+
+- The web endpoint that signs the scorer token (the UI doesn't yet subscribe to lock updates
+  over sockets; it polls while read-only).
+- A conflict screen for 409s (today the pad resyncs and discards unsent entries, with a message).
+- Targeted lock handoff in the UI (the API supports it).
+- An E2E for service-worker offline reload (needs a production build) and PNG icons (192/512).
+- The CI workflow has never run.
+
 ## 8. Before coding
 
 Check current versions with `npm view <pkg> version` for `socket.io`, `socket.io-client`,

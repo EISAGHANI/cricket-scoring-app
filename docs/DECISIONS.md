@@ -319,3 +319,26 @@ its own `frame-ancestors` rule for OBS.
 - One snapshot row per match; an `UNDO` or `CORRECTION` after it triggers a full replay.
 
 **Consequences.** Two scorers race on `seq` (the loser resyncs) until the Phase 4 scoring lock.
+
+## ADR-0018 — Phase 4: scoring lock, realtime fan-out, offline outbox, PWA
+
+**Status:** Accepted (approved by owner, 2026-11-04, defaults of PHASE_4_PLAN.md)
+
+**Decisions.**
+
+1. **Scoring lock.** One lease row per match, never deleted: release sets `expires_at` to now, so
+   `generation` only grows. TTL 60 s, heartbeat every TTL/3. Taking over needs `match.manage`.
+   `requireLock` runs inside the event transaction; a stale holder gets 423 `LOCK_REQUIRED` and
+   its pad goes read-only, keeping unsent entries.
+2. **Realtime without the Redis adapter.** The API publishes to Redis (best effort); every
+   `apps/realtime` instance `psubscribe`s `match:*` and emits to its own Socket.IO rooms. Sockets
+   are a hint: clients always catch up over HTTP (`?after=<seq>`) and fall back to polling.
+3. **Offline outbox.** Scorer entries go into a Dexie (IndexedDB) outbox, apply locally at once
+   and flush in batches of up to 100 through `POST /api/matches/:id/events/batch` (stops at the
+   first failure), with jittered exponential backoff (1 s to 30 s).
+4. **PWA.** Hand-written `public/sw.js` (no new dependency), registered in production only. It
+   caches `/_next/static/` and the scorer page of matches already opened, never `/api/`, and is
+   cleared on sign-out.
+
+**Consequences.** Offline sync is verified in E2E with `context.setOffline`; the service worker
+itself is only exercised in a production build. A 409 still resyncs and drops unsent entries.

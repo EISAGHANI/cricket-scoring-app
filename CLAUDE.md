@@ -3,8 +3,8 @@
 Cricket scoring & league platform (CricClubs + CricHeroes class). The full brief is
 `docs/PROJECT_BRIEF.md`. Read it before starting a phase.
 
-**Current phase:** 3 complete (match setup, event API, scorer pad, live match pages; see
-`docs/PHASE_3_PLAN.md` §8). Next: Phase 4 (realtime + offline). Plan each phase and get owner approval
+**Current phase:** 4 complete (scoring lock, Socket.IO realtime, offline outbox, PWA; see
+`docs/PHASE_4_PLAN.md` (Outcome) for deferred items). Next: Phase 5. Plan each phase and get owner approval
 before writing its feature code.
 
 ## Working rules (from the brief, condensed)

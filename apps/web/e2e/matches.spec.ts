@@ -161,6 +161,58 @@ test("set up a match, score it to a result, and a second browser follows it live
 	await viewer.close();
 });
 
+test("scoring continues offline and syncs on reconnect", async ({ page, browser, context }) => {
+	test.setTimeout(120_000);
+	const s = Date.now().toString(36);
+	await signIn(page, "offline");
+	await createTeam(page, `Kites ${s}`, "KIT");
+	await createTeam(page, `Crows ${s}`, "CRO");
+	await page.goto("/matches/new");
+	await field(page, /Your team/).selectOption({ label: `Kites ${s}` });
+	await field(page, /Opponent/).selectOption({ label: `Crows ${s}` });
+	await button(page, "Next").click();
+	await page.getByRole("button", { name: /Custom/ }).click();
+	await field(page, "Overs per side").fill("2");
+	await field(page, "Players per side").fill("3");
+	await button(page, "Next").click();
+	await addGuests(page, [`Ka ${s}`, `Kb ${s}`, `Kc ${s}`]);
+	await button(page, "Next").click();
+	await addGuests(page, [`Ca ${s}`, `Cb ${s}`, `Cc ${s}`]);
+	await button(page, "Next").click();
+	await button(page, "Create match").click();
+	await expect(page).toHaveURL(/\/matches\/[0-9a-f-]{36}$/);
+	const matchUrl = page.url();
+
+	await page.getByRole("link", { name: "Score" }).click();
+	await button(page, "Start scoring").click();
+	await page.getByRole("button", { name: `Kites ${s}` }).click();
+	await button(page, "Record toss").click();
+	await page.getByRole("button", { name: `Ca ${s}` }).click();
+	await button(page, "Start innings").click();
+	await expect(page.getByText("Saved")).toBeVisible();
+
+	// Lose the network: the pad keeps scoring from the local engine and queues the entries.
+	await context.setOffline(true);
+	await button(page, "Four").click();
+	await button(page, "Six").click();
+	await button(page, "1 run").click();
+	const score = page.getByRole("region", { name: "Score" });
+	await expect(score).toContainText("11/0");
+	await expect(page.getByText(/3 not saved/)).toBeVisible();
+
+	// Back online: the outbox drains and a fresh viewer sees the same score.
+	await context.setOffline(false);
+	await page.evaluate(() => window.dispatchEvent(new Event("online")));
+	await expect(page.getByText("Saved")).toBeVisible({ timeout: 30_000 });
+	await expect(score).toContainText("11/0");
+	const viewer = await browser.newPage({ viewport: { width: 375, height: 800 } });
+	await viewer.goto(matchUrl);
+	await expect(viewer.getByRole("region", { name: "Score" })).toContainText("11/0", {
+		timeout: 15_000,
+	});
+	await viewer.close();
+});
+
 test("only the match's scorers can score", async ({ page }) => {
 	const s = Date.now().toString(36);
 	await signIn(page, "owner");
