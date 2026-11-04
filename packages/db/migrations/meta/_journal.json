@@ -29,6 +29,13 @@
       "when": 1793694968847,
       "tag": "0003_matches_events",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793790969128,
+      "tag": "0004_scoring_locks",
+      "breakpoints": true
     }
   ]
 }

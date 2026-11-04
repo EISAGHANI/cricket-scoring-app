@@ -22,22 +22,13 @@ import { matchResource, startPayload } from "@/features/matches/service";
 import type { ServiceContext } from "@/lib/services/context";
 import { notFound, ServiceError } from "@/lib/services/errors";
 import { parse } from "@/lib/services/result";
+import { ScoringError } from "./errors";
+import { requireLock } from "./lock";
 import { summarize } from "./summary";
 
 const { matches, ballEvents, matchStateSnapshots } = schema;
 
-/** A scoring request the client must react to (HTTP 409 / 422). */
-export class ScoringError extends Error {
-	constructor(
-		readonly status: 409 | 422,
-		readonly code: string,
-		message: string,
-		readonly details: { lastSeq?: number; rule?: string; seq?: number | null } = {},
-	) {
-		super(message);
-		this.name = "ScoringError";
-	}
-}
+export { ScoringError };
 
 export interface Accepted {
 	/** The match's head after this request. */
@@ -129,6 +120,7 @@ export async function submitEvent(
 		}
 		if (m.status === "CANCELLED")
 			throw new ScoringError(422, "MATCH_CANCELLED", "This match was cancelled");
+		await requireLock(tx, matchId, subject.userId, submission.deviceId, submission.lockGeneration);
 		if (event.seq !== m.lastSeq + 1) {
 			throw new ScoringError(409, "SEQ_CONFLICT", "The match has moved on; resync and retry", {
 				lastSeq: m.lastSeq,

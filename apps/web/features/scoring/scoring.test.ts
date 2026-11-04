@@ -21,6 +21,7 @@ import {
 } from "@/features/matches/service";
 import { createTeam } from "@/features/teams/service";
 import { as, makeUser } from "@/test/fixtures";
+import { acquireLock } from "./lock";
 import { eventsAfter, loadState, submitEvent } from "./service";
 
 const { db, close } = createTestDb();
@@ -95,6 +96,7 @@ const ball = (p: Partial<DeliveryPayload> = {}): DeliveryPayload => ({
 /** A scorer client: tracks seq and submits events in order. */
 function scorer(matchId: string, userId: string) {
 	let seq = 0;
+	let locked = false;
 	return {
 		get seq() {
 			return seq;
@@ -106,7 +108,12 @@ function scorer(matchId: string, userId: string) {
 				payload,
 				...(id ? { id } : {}),
 			} as never);
-			const result = await submitEvent(await as(db, userId), matchId, sub);
+			const ctx = await as(db, userId);
+			if (!locked) {
+				await acquireLock(ctx, matchId, { deviceId: "test-device" });
+				locked = true;
+			}
+			const result = await submitEvent(ctx, matchId, sub);
 			seq = result.lastSeq;
 			return { result, sub };
 		},
@@ -466,6 +473,7 @@ describe("golden match through the API", () => {
 						: value;
 		const events = original.map((e) => remap(e) as MatchEvent);
 
+		await acquireLock(ctx, matchId, { deviceId: "test-device" });
 		for (const event of events) {
 			const sub = submission(matchId, event);
 			await submitEvent(ctx, matchId, sub);

@@ -160,6 +160,29 @@ export const ballEvents = pgTable(
 );
 
 /**
+ * One scoring lease per match (PHASE_4_PLAN.md §2). The row is never deleted: releasing expires
+ * it, so `generation` (the fencing token) only ever grows. A handoff offer names the user (and
+ * optionally the device) allowed to take the lock over before it expires.
+ */
+export const matchScoringLocks = pgTable("match_scoring_locks", {
+	matchId: uuid("match_id")
+		.primaryKey()
+		.references(() => matches.id, { onDelete: "cascade" }),
+	holderUserId: uuid("holder_user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	holderDeviceId: text("holder_device_id").notNull(),
+	generation: integer("generation").notNull().default(1),
+	acquiredAt: timestamp("acquired_at", { withTimezone: true }).notNull().defaultNow(),
+	heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull().defaultNow(),
+	expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+	handoffToUserId: uuid("handoff_to_user_id").references(() => users.id, {
+		onDelete: "set null",
+	}),
+	handoffToDeviceId: text("handoff_to_device_id"),
+});
+
+/**
  * Replay cache: the latest state per match, written at ends of overs and innings. Ignored when
  * `engine_version` differs from the running engine (the log is replayed instead).
  */

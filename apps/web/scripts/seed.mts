@@ -18,6 +18,7 @@ import { addSquadPlayer, createOwnProfile, setSquadRole } from "@/features/playe
 import { createTeam } from "@/features/teams/service";
 import { createVenue } from "@/features/venues/service";
 import { createMatch, startPayload } from "@/features/matches/service";
+import { acquireLock, releaseLock } from "@/features/scoring/lock";
 import { loadState, submitEvent } from "@/features/scoring/service";
 import { simulateNext } from "@/features/scoring/simulate";
 import type { ServiceContext } from "@/lib/services/context";
@@ -278,6 +279,7 @@ async function play(
 	until: (state: Awaited<ReturnType<typeof loadState>>) => boolean = () => false,
 ) {
 	const ctx = await ctxFor(db, userId);
+	await acquireLock(ctx, matchId, { deviceId: "seed" });
 	let seq = 0;
 	const send = async (type: string, payload: unknown) => {
 		seq++;
@@ -289,14 +291,18 @@ async function play(
 			schemaVersion: 1,
 		});
 	};
-	await send("MATCH_STARTED", await startPayload(db, matchId));
-	let state = await loadState(db, matchId);
-	for (;;) {
-		if (until(state)) return;
-		const next = simulateNext(state, rand);
-		if (next === null) return;
-		await send(next.type, next.payload);
-		state = await loadState(db, matchId);
+	try {
+		await send("MATCH_STARTED", await startPayload(db, matchId));
+		let state = await loadState(db, matchId);
+		for (;;) {
+			if (until(state)) return;
+			const next = simulateNext(state, rand);
+			if (next === null) return;
+			await send(next.type, next.payload);
+			state = await loadState(db, matchId);
+		}
+	} finally {
+		await releaseLock(ctx, matchId, { deviceId: "seed" });
 	}
 }
 

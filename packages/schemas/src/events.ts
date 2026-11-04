@@ -212,6 +212,8 @@ export const EventSubmissionSchema = z.strictObject({
 	deviceId: z.string().min(1).max(100),
 	clientTimestamp: z.iso.datetime(),
 	schemaVersion: z.literal(1),
+	/** The generation of the scoring lock the client believes it holds (fencing token). */
+	lockGeneration: z.number().int().positive().optional(),
 });
 
 export type EventSubmission = z.infer<typeof EventSubmissionSchema>;

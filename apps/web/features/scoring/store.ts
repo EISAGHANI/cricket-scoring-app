@@ -1,5 +1,5 @@
 /**
- * The scorer's client store (PHASE_3_PLAN.md §4). Each tap is applied with the engine locally
+ * The scorer's client store (PHASE_3_PLAN.md Â§4). Each tap is applied with the engine locally
  * first (instant pad), queued, and posted to the event API in order. The server is the
  * authority: on a conflict or a rejection the store resyncs from the server's log.
  */
@@ -148,7 +148,7 @@ export function createScoringStore(initial: MatchEvent[], transport: Transport):
 
 			record(type, payload) {
 				if (!apply(type, payload)) return false;
-				// The engine requires END_OF_OVER once an over is due; scorers never tap it (ADR-0005 §3).
+				// The engine requires END_OF_OVER once an over is due; scorers never tap it (ADR-0005 Â§3).
 				if (type === "DELIVERY") {
 					const inn = currentInnings(get().state);
 					if (inn !== null && overDue(inn)) apply("END_OF_OVER", { reason: "NORMAL" }, false);
@@ -201,23 +201,77 @@ export function canUndo(log: readonly MatchEvent[]): boolean {
 	return last !== undefined && last.type !== "MATCH_STARTED";
 }
 
-/** The fetch transport used by the app. */
+/**
+ * The fetch transport used by the app. It takes the scoring lock on first use and again if the
+ * lease lapsed with nobody else holding it; a lock held by someone else comes back as a 423.
+ * (Heartbeats, handoff and the lock UI arrive with PHASE_4_PLAN M6.)
+ */
 export function httpTransport(matchId: string, deviceId: string): Transport {
 	const url = `/api/matches/${matchId}/events`;
+	let generation: number | undefined;
+	const json = { "Content-Type": "application/json" };
+
+	async function acquire(): Promise<
+		{ ok: true } | { ok: false; status: number; code: string; error: string }
+	> {
+		try {
+			const res = await fetch(`/api/matches/${matchId}/lock`, {
+				method: "POST",
+				headers: json,
+				body: JSON.stringify({ action: "acquire", deviceId }),
+			});
+			const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+			if (res.ok) {
+				generation = Number(body.generation);
+				return { ok: true };
+			}
+			return {
+				ok: false,
+				status: res.status,
+				code: String(body.code ?? "ERROR"),
+				error: String(body.error ?? res.statusText),
+			};
+		} catch {
+			return { ok: false, status: 0, code: "NETWORK", error: "Network error" };
+		}
+	}
+
+	async function send(event: MatchEvent): Promise<Response> {
+		return fetch(url, {
+			method: "POST",
+			headers: json,
+			body: JSON.stringify({
+				matchId,
+				event,
+				deviceId,
+				clientTimestamp: new Date().toISOString(),
+				schemaVersion: 1,
+				...(generation === undefined ? {} : { lockGeneration: generation }),
+			}),
+		});
+	}
+
 	return {
 		async post(event) {
 			try {
-				const res = await fetch(url, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({
-						matchId,
-						event,
-						deviceId,
-						clientTimestamp: new Date().toISOString(),
-						schemaVersion: 1,
-					}),
-				});
+				if (generation === undefined) {
+					const lock = await acquire();
+					if (!lock.ok) return lock;
+				}
+				let res = await send(event);
+				if (
+					res.status === 423 &&
+					(
+						await res
+							.clone()
+							.json()
+							.catch(() => ({}))
+					).code === "LOCK_REQUIRED"
+				) {
+					const lock = await acquire();
+					if (!lock.ok) return lock;
+					res = await send(event);
+				}
 				const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 				if (res.ok) return { ok: true, lastSeq: Number(body.lastSeq) };
 				return {
