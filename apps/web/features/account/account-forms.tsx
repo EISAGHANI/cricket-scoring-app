@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button, Field, inputClass } from "@/components/ui";
 import { authClient } from "@/lib/auth/client";
+import { clearOfflineCache } from "@/features/scoring/register-sw";
 
 export function NameForm({ initialName }: { initialName: string }) {
 	const router = useRouter();
@@ -55,6 +56,7 @@ export function SignOutButton() {
 			onClick={async () => {
 				setBusy(true);
 				await authClient.signOut();
+				await clearOfflineCache();
 				router.replace("/");
 				router.refresh();
 			}}

@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
 					dev: env.NODE_ENV === "development",
 				}),
 			},
+			{
+				// The worker must always be revalidated so updates reach scorers promptly.
+				source: "/sw.js",
+				headers: [
+					{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+					{ key: "Content-Type", value: "text/javascript; charset=utf-8" },
+				],
+			},
 		];
 	},
 	partialPrefetching: true,

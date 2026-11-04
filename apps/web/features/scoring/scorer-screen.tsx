@@ -32,6 +32,7 @@ import { Scorecard } from "./scorecard-table";
 import { canUndo, createScoringStore, deviceId, httpTransport, type SyncStatus } from "./store";
 import { createOutbox, outboxAvailable, type OutboxPort } from "./outbox";
 import { LOCK_TTL_MS } from "./lock-constants";
+import { registerServiceWorker } from "./register-sw";
 
 type Flash = { text: string; color: string; key: number } | null;
 
@@ -112,6 +113,7 @@ export function ScorerScreen(props: {
 	startPayload: MatchStartedEvent["payload"] | null;
 }) {
 	const [boot, setBoot] = useState<{ outbox?: OutboxPort; recovered: MatchEvent[] } | null>(null);
+	useEffect(registerServiceWorker, []);
 	// Read the durable outbox before building the store, so unsent entries survive a reload.
 	useEffect(() => {
 		let live = true;

@@ -10,6 +10,16 @@ test("responses carry security headers", async ({ request }) => {
 	expect(h["x-powered-by"]).toBeUndefined();
 });
 
+test("the app is installable and its service worker never caches the API", async ({ request }) => {
+	const manifest = await request.get("/manifest.webmanifest");
+	expect(manifest.ok()).toBe(true);
+	expect((await manifest.json()).display).toBe("standalone");
+	const sw = await request.get("/sw.js");
+	expect(sw.headers()["cache-control"]).toContain("no-cache");
+	const source = await sw.text();
+	expect(source).toContain('startsWith("/api/")');
+});
+
 test("the session cookie is HttpOnly and SameSite=Lax", async ({ request }) => {
 	const email = uniqueEmail("cookie");
 	const origin = { Origin: "http://localhost:3100" };
