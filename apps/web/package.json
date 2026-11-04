@@ -21,6 +21,7 @@
     "@cricket/scoring-engine": "workspace:*",
     "better-auth": "1.7.15",
     "drizzle-orm": "0.45.4",
+    "ioredis": "6.0.0",
     "lucide-react": "^1.66.0",
     "next": "16.4.3",
     "nodemailer": "10.3.1",

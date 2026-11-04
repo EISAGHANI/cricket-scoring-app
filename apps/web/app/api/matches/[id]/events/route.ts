@@ -6,13 +6,25 @@ import { revalidateTag } from "next/cache";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { matchTags } from "@/features/matches/tags";
-import { eventsAfter, ScoringError, submitEvent } from "@/features/scoring/service";
+import { publishEvents } from "@/features/scoring/publish";
+import { eventsAfter, ScoringError, submitBatch, submitDetailed } from "@/features/scoring/service";
 import { db } from "@/lib/db";
+import { publish } from "@/lib/realtime";
 import { errorResponse, json, sameOrigin } from "@/lib/services/http";
 import { serviceContext } from "@/lib/services/server";
 
 const MatchId = z.uuid();
 const After = z.coerce.number().int().min(0).default(0);
+
+const isBatch = (body: unknown): body is { submissions: unknown } =>
+	typeof body === "object" && body !== null && "submissions" in body;
+
+// The match page must show the new ball on its next render. Lists must show a match moving
+// between live / upcoming / results at once; score changes may lag briefly.
+function revalidate(matchId: string, statusChanged: boolean) {
+	revalidateTag(matchTags.one(matchId), { expire: 0 });
+	revalidateTag(matchTags.list, statusChanged ? { expire: 0 } : "max");
+}
 
 export async function GET(request: NextRequest, ctx: RouteContext<"/api/matches/[id]/events">) {
 	const id = MatchId.safeParse((await ctx.params).id);
@@ -37,12 +49,22 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/matches
 	}
 	const service = await serviceContext();
 	try {
-		const result = await submitEvent(service, id.data, body);
+		if (isBatch(body)) {
+			const { result, stored } = await submitBatch(service, id.data, body.submissions);
+			if (stored.length > 0) {
+				revalidate(
+					id.data,
+					stored.some((s) => s.statusChanged),
+				);
+				await publishEvents(publish, id.data, stored);
+			}
+			return json(result);
+		}
+		const stored = await submitDetailed(service, id.data, body);
+		const { event: _event, status: _status, ...result } = stored;
 		if (!result.duplicate) {
-			// The match page must show the new ball on its next render. Lists must show a match
-			// moving between live / upcoming / results at once; score changes may lag briefly.
-			revalidateTag(matchTags.one(id.data), { expire: 0 });
-			revalidateTag(matchTags.list, result.statusChanged ? { expire: 0 } : "max");
+			revalidate(id.data, result.statusChanged);
+			await publishEvents(publish, id.data, [stored]);
 		}
 		return json(result);
 	} catch (error) {

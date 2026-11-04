@@ -13,6 +13,8 @@ import {
 	releaseLock,
 	takeOverLock,
 } from "@/features/scoring/lock";
+import { publishLock } from "@/features/scoring/publish";
+import { publish } from "@/lib/realtime";
 import { errorResponse, json, sameOrigin } from "@/lib/services/http";
 import { serviceContext } from "@/lib/services/server";
 
@@ -55,7 +57,10 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/matches
 	}
 	const service = await serviceContext();
 	try {
-		return json(await actions[action as keyof typeof actions](service, id.data, input));
+		const result = await actions[action as keyof typeof actions](service, id.data, input);
+		const { lock, live } = await getLock(service, id.data);
+		await publishLock(publish, id.data, lock, !live);
+		return json(result);
 	} catch (error) {
 		return failure(error, service.subject);
 	}

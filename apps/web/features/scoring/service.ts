@@ -89,11 +89,28 @@ const statusOf = (state: MatchState) =>
 				? ("ABANDONED" as const)
 				: ("COMPLETED" as const);
 
+/** `submitDetailed`'s result: what was stored, for publishing. */
+export interface Submitted extends Accepted {
+	event: MatchEvent;
+	/** The match's status after this request. */
+	status: typeof matches.$inferSelect.status;
+}
+
+/** The scoring API's view of a submission (no event body). */
 export async function submitEvent(
 	ctx: ServiceContext,
 	matchId: string,
 	raw: unknown,
 ): Promise<Accepted> {
+	const { lastSeq, duplicate, statusChanged } = await submitDetailed(ctx, matchId, raw);
+	return { lastSeq, duplicate, statusChanged };
+}
+
+export async function submitDetailed(
+	ctx: ServiceContext,
+	matchId: string,
+	raw: unknown,
+): Promise<Submitted> {
 	const submission = parse(EventSubmissionSchema, raw);
 	if (submission.matchId !== matchId)
 		throw new ServiceError("INVALID", "The event belongs to another match");
@@ -113,7 +130,14 @@ export async function submitEvent(
 				existing.seq === event.seq &&
 				existing.type === event.type &&
 				isDeepStrictEqual(existing.payload, event.payload);
-			if (same) return { lastSeq: m.lastSeq, duplicate: true, statusChanged: false };
+			if (same)
+				return {
+					lastSeq: m.lastSeq,
+					duplicate: true,
+					statusChanged: false,
+					event,
+					status: m.status,
+				};
 			throw new ScoringError(409, "DUPLICATE_ID", "Another event already has this id", {
 				lastSeq: m.lastSeq,
 			});
@@ -188,8 +212,82 @@ export async function submitEvent(
 				.values({ matchId, ...snapshot })
 				.onConflictDoUpdate({ target: matchStateSnapshots.matchId, set: snapshot });
 		}
-		return { lastSeq: event.seq, duplicate: false, statusChanged: status !== m.status };
+		return {
+			lastSeq: event.seq,
+			duplicate: false,
+			statusChanged: status !== m.status,
+			event,
+			status,
+		};
 	});
+}
+
+export const MAX_BATCH = 500;
+
+export interface BatchResult {
+	/** The match's head after the last accepted event. */
+	lastSeq: number;
+	accepted: { id: string; seq: number; duplicate: boolean }[];
+	/** The first rejection; later events were not attempted. */
+	failed: {
+		index: number;
+		status: number;
+		code: string;
+		error: string;
+		lastSeq?: number;
+		rule?: string;
+	} | null;
+}
+
+const SERVICE_STATUS = { INVALID: 400, NOT_FOUND: 404, CONFLICT: 409 } as const;
+
+/**
+ * Submit events in order (an offline tail). Each is its own transaction, so what was accepted
+ * stays accepted; the first rejection stops the batch. Authorization and lock failures that
+ * apply to the whole request still throw.
+ */
+export async function submitBatch(
+	ctx: ServiceContext,
+	matchId: string,
+	submissions: unknown,
+): Promise<{ result: BatchResult; stored: Submitted[] }> {
+	if (!Array.isArray(submissions) || submissions.length === 0 || submissions.length > MAX_BATCH) {
+		throw new ServiceError("INVALID", `Send between 1 and ${MAX_BATCH} events`);
+	}
+	const accepted: BatchResult["accepted"] = [];
+	const stored: Submitted[] = [];
+	let lastSeq = 0;
+	for (const [index, raw] of submissions.entries()) {
+		try {
+			const s = await submitDetailed(ctx, matchId, raw);
+			lastSeq = s.lastSeq;
+			accepted.push({ id: s.event.id, seq: s.event.seq, duplicate: s.duplicate });
+			if (!s.duplicate) stored.push(s);
+		} catch (error) {
+			let failed: BatchResult["failed"];
+			if (error instanceof ScoringError) {
+				// A lock problem on the first event concerns the whole request.
+				if (error.status === 423 && index === 0) throw error;
+				failed = {
+					index,
+					status: error.status,
+					code: error.code,
+					error: error.message,
+					...(error.details.lastSeq === undefined ? {} : { lastSeq: error.details.lastSeq }),
+					...(error.details.rule === undefined ? {} : { rule: error.details.rule }),
+				};
+			} else if (error instanceof ServiceError && error.code in SERVICE_STATUS) {
+				failed = {
+					index,
+					status: SERVICE_STATUS[error.code as keyof typeof SERVICE_STATUS],
+					code: error.code,
+					error: error.message,
+				};
+			} else throw error;
+			return { result: { lastSeq, accepted, failed }, stored };
+		}
+	}
+	return { result: { lastSeq, accepted, failed: null }, stored };
 }
 
 export interface EventPage {
