@@ -4,6 +4,18 @@ const EnvSchema = z.object({
 	NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 	PORT: z.coerce.number().int().positive(),
 	REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+	/** Shared with the web app; signs the scorer tokens that unlock the lock channel. */
+	REALTIME_SECRET: z.string().min(32).optional(),
+	/** Allowed browser origins, comma-separated. Unset allows none (same-origin only). */
+	CORS_ORIGINS: z
+		.string()
+		.optional()
+		.transform((v) =>
+			v
+				?.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean),
+		),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

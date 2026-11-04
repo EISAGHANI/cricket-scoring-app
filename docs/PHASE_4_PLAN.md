@@ -45,7 +45,7 @@ and handoff, sync status UI. E2E: score an innings while toggling the network of
 
 **`apps/realtime`**
 
-- Socket.IO server with the Redis adapter, so it runs as two or more instances.
+- Socket.IO server that runs as two or more instances. The web app publishes to plain Redis channels and every instance pattern-subscribes (`match:*`) and emits to its own clients, so no `@socket.io/redis-adapter` is needed (it would deliver each message twice). Lock-channel access needs an HMAC scorer token (`REALTIME_SECRET`, issued by the web app in M6).
 - Rooms `match:{id}`. On `subscribe` the server replies with the current `last_seq` so the client
   can resync immediately. Events are fanned out as `{ seq, event }`.
 - `/healthz` also checks Redis. Basic metrics: connections, events per second.
